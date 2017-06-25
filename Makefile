@@ -8,7 +8,7 @@ CFLAGS += -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIE -pie
 CFLAGS += -Wl,-z,relro -Wl,-z,now
 
 libraries = opus asound m
-objs = audio.o config.o config_core.o
+objs = audio.o config.o config_core.o varint.o
 libparams = $(addprefix -l,$(libraries))
 
 .PHONY: playback_test

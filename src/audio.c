@@ -57,18 +57,14 @@ audio_packet *get_audio_packet(audio_manager *am, size_t min_size) { /*{{{*/
 	return ap;
 } /*}}}*/
 void ap_post(audio_manager *am, audio_packet *ap) { /*{{{*/
-	fprintf(stderr, "ap->sid: %" PRId64 "\n", ap->audio.sid);
-	fprintf(stderr, "bl->n: %zu\n", kab_lsize(&am->out.buffer_list));
 	keyed_ap_buffer *kab = NULL;
 	for (kab_iter kit=SLL_ISTART(&am->out.buffer_list); !kab_iisend(&kit); kab_inext(&kit)) {
 		kab = kab_iget(&kit);
-		fprintf(stderr, "%p, %ld\n", kab, kab->key);
 		if (kab->key == ap->audio.sid) {
 			ap_lpushback(&kab->buffer, ap);
 			return;
 		}
 	}
-	fprintf(stderr, "found no matching buffer\n");
 	bool isnew = false;
 	kab = kab_pgetm(&am->out.buffer_pool, &isnew);
 
@@ -76,7 +72,6 @@ void ap_post(audio_manager *am, audio_packet *ap) { /*{{{*/
 	kab->prebuffering = true;
 	kab->drain = ap->audio.opus.islast;
 	if (isnew) {
-		fprintf(stderr, "created a new buffer\n");
 		kab_lnclear(kab);
 		ap_lclear(&kab->buffer);
 		int e;
@@ -84,13 +79,12 @@ void ap_post(audio_manager *am, audio_packet *ap) { /*{{{*/
 		assert(e == OPUS_OK);
 	}
 	else {
-		fprintf(stderr, "reused an old buffer\n");
 		opus_decoder_ctl(kab->decoder, OPUS_RESET_STATE);
 	}
 	ap_lpushback(&kab->buffer, ap);
 	kab_lpushback(&am->out.buffer_list, kab);
 } /*}}}*/
-void decode_and_mix(audio_manager *am) { /*{{{*/
+bool decode_and_mix(audio_manager *am) { /*{{{*/
 	keyed_ap_buffer *kab = NULL;
 	if (am->out.mixbuf_is_dirty) {
 		bzero(am->out.mixbuf, am->cfg->packetlen_samples*sizeof(int32_t));
@@ -99,7 +93,7 @@ void decode_and_mix(audio_manager *am) { /*{{{*/
 	if (am->out.pcmri != am->cfg->packetlen_samples) {
 		// this signifies that not all data has been loaded into alsa yet
 		// so we cannot yet write anything to the buffer
-		return;
+		return false;
 	}
 	bool decoded = false;
 	for (kab_iter kit=SLL_ISTART(&am->out.buffer_list); !kab_iisend(&kit); kab_inext(&kit)) {
@@ -138,96 +132,82 @@ void decode_and_mix(audio_manager *am) { /*{{{*/
 			}
 		}
 		am->out.pcmri = 0;
+		return true;
 	}
+	return false;
 } /*}}}*/
 bool write_alsa_output(audio_manager *am) { /*{{{*/
 	if (am->out.pcmri >= am->cfg->packetlen_samples) { return false; }
 	snd_pcm_sframes_t n = snd_pcm_avail(am->alsa.output);
-	printf("alsa is ready to receive %ld frames\n", n);
 	n = snd_pcm_writei(am->alsa.output, am->out.pcmbuf+am->out.pcmri, am->cfg->packetlen_samples-am->out.pcmri);
+	if (n == -EAGAIN) {
+		return false;
+	}
 	if (n < 0) {
 		n = snd_pcm_recover(am->alsa.output, n, 0);
 	}
 	if (n < 0) {
-		fprintf(stderr, "snd_pcm_writei failed %s\n", snd_strerror(n));
+		//fprintf(stderr, "snd_pcm_writei failed %s\n", snd_strerror(n));
+		return true;
 	}
 	if (n >= 0) {
-		printf("wrote %ld frames\n", n);
 		am->out.pcmri += n;
 	}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 	return true;
-//	snd_pcm_state_t state = snd_pcm_state(am->alsa.output);
-//	if (state != SND_PCM_STATE_PREPARED && state != SND_PCM_STATE_RUNNING) {
-//		if (state == SND_PCM_STATE_SUSPENDED) {
-//			snd_pcm_resume(am->alsa.output);
-//		}
-//		else {
-//			snd_pcm_prepare(am->alsa.output);
-//		}
-//	}
-//	printf("there are %zu samples to play\n", am->cfg->packetlen_samples-am->out.pcmri);
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//	//printwave2(am->out.pcmbuf+am->out.pcmri, am->cfg->packetlen_samples-am->out.pcmri);
-//	snd_pcm_sframes_t ret = 0;
-//	do {
-//		ret = snd_pcm_writei(am->alsa.output, am->out.pcmbuf+am->out.pcmri, am->cfg->packetlen_samples-am->out.pcmri);
-//		if (ret >=0 && (size_t)ret < am->cfg->packetlen_samples-am->out.pcmri) {
-//			am->out.pcmri += ret;
-//			ret = -EAGAIN;
-//		}
-//	} while (ret == -EAGAIN);
-//	if (ret >= 0) {
-//		am->out.pcmri += ret;
-//	}
-//	else {
-//		switch (ret) {
-//			case -EAGAIN:
-//				fprintf(stderr, "eagain: %s\n", snd_strerror(ret));
-//				return true;
-//			case -EBADFD:
-//				fprintf(stderr, "ebadfd: %s\n", snd_strerror(ret));
-//				ret = snd_pcm_prepare(am->alsa.output);
-//				if (ret < 0) {
-//					fprintf(stderr, "audio playback error: %s\n", snd_strerror(ret));
-//				}
-//				break;
-//			case -EPIPE:
-//			//case -ESTRPIPE:
-//				fprintf(stderr, "epipe or estrpipe: %s\n", snd_strerror(ret));
-//				ret = snd_pcm_recover(am->alsa.output, ret, 0);
-//				while (ret < 0) {
-//					fprintf(stderr, "audio playback error: %s\n", snd_strerror(ret));
-//					ret = snd_pcm_prepare(am->alsa.output);
-//				}
-//				break;
-//			default:
-//				fprintf(stderr, "uncaught audio playback error: %s\n", snd_strerror(ret));
-//				break;
-//		}
-//		return false;
-//	}
-//	return true;
+}/*}}}*/
+
+void fprint_audio_packet(FILE *f, const audio_packet *ap) { /*{{{*/
+	assert(ap != NULL);
+	if (ap->type == PING) {
+		fprintf(f, "[ping, ts=%016"PRIx64"]\n", ap->ping.timestamp);
+	}
+	else if (ap->type == OPUS) {
+		fprintf(f,
+		        "[opus, target=%02x, sid=%016" PRIx16 ", seq=%016" PRIx16 ", dlen=%04" PRIu16 ", last?=%1c]\n",
+		        ap->audio.target,
+		        ap->audio.sid,
+		        ap->audio.seq,
+		        ap->audio.opus.len,
+		        ap->audio.opus.islast?'y':'n');
+	}
+} /*}}}*/
+bool interpret_contents(audio_packet *ap) { /*{{{*/
+	assert(ap != NULL);
+	assert(ap->data != NULL);
+	ap->type = ap->data[0] & 0xe0;
+	int64_t tmp;
+	if (ap->type == PING) {
+		varint_decode(&ap->ping.timestamp, ap->data+1, ap->dsz-1);
+		return true;
+	}
+	else {
+		ap->audio.target = ap->data[0] & 0x1f;
+
+		uint8_t *dptr = ap->data + 1;
+		size_t left = ap->dsz - 1;
+
+		size_t delta = varint_decode(&tmp, dptr, left);
+		ap->audio.sid = tmp & 0xffff;
+		left -= delta;
+		dptr += delta;
+
+		delta = varint_decode(&tmp, dptr, left);
+		ap->audio.seq = tmp & 0xffff;
+		left -= delta;
+		dptr += delta;
+
+		if (ap->type == OPUS) {
+			tmp = 0;
+			delta = varint_decode(&tmp, dptr, left);
+			left -= delta;
+			dptr += delta;
+
+			ap->audio.opus.len = tmp & 0x1fff;
+			ap->audio.opus.islast = (tmp & 0x2000) != 0;
+			ap->audio.opus.data = dptr;
+
+			return true;
+		}
+	}
+	return false;
 }/*}}}*/

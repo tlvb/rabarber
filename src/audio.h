@@ -4,22 +4,34 @@
 #include <opus/opus.h>
 #include "sll_meta.h"
 #include "config.h"
+#include "varint.h"
+
+// audio packet types
+#define PING 32
+#define OPUS 128
+
+// incoming voice packet targets
+#define NORMAL 0
+#define CHANNEL_WHISPER 1
+#define USER_WHISPER 2
+#define LOOPBACK 31
 
 typedef struct audio_packet {
 	SLL_LINK(audio_packet);
-	uint8_t *data;
-	size_t dsz;
+	uint8_t  *data;
+	uint16_t  dsz;  // if we need more than 0xffff bytes something is seriously wrong
+	uint8_t   type;
 	union {
 		struct {
 			int64_t timestamp;
 		} ping;
 		struct {
 			uint8_t target;
-			int64_t sid;
-			int64_t seq;
+			uint16_t sid; // varint in protocol but assumed to not use the full range
+			uint16_t seq; // also varint but it makes no sense to have to keep track of 64 bits' worth of packets
 			struct {
 				uint8_t *data;
-				size_t len;
+				uint16_t len; // protocol specifies max len of 0x1fff;
 				bool islast;
 			} opus;
 		} audio;
@@ -31,7 +43,7 @@ SLL_POOL_DECLS(ap, audio_packet, ap_list, ap_pool);
 
 typedef struct keyed_ap_buffer {
 	SLL_LINK(keyed_ap_buffer);
-	int64_t key;
+	uint16_t key;
 	bool prebuffering;
 	ap_list buffer;
 	OpusDecoder *decoder;
@@ -71,5 +83,8 @@ void ap_free(audio_packet *ap);
 void kab_free(keyed_ap_buffer *kab);
 
 void ap_post(audio_manager *am, audio_packet *ap);
-void decode_and_mix(audio_manager *am);
+bool decode_and_mix(audio_manager *am);
 bool write_alsa_output(audio_manager *am);
+
+void fprint_audio_packet(FILE *f, const audio_packet *ap);
+bool interpret_contents(audio_packet *ap);
