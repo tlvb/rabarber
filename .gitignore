@@ -1,0 +1,10 @@
+playback_test
+*.o
+
+# these are symlinks to elsewhere
+src/config_core.c
+src/config_core.h
+src/sll_meta.h
+src/varint.c
+src/varint.h
+
