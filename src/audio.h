@@ -68,7 +68,7 @@ typedef struct {
 
 	} out;
 	struct {
-		int tmp;
+		int16_t *pcmbuf;
 	} in;
 	struct {
 		snd_pcm_t *output;
@@ -78,6 +78,7 @@ typedef struct {
 
 bool am_setup(audio_manager *am, const audio_config *ac);
 bool setup_alsa_output(audio_manager *am);
+bool setup_alsa_input(audio_manager *am);
 bool shutdown_alsa_output(audio_manager *am);
 void ap_free(audio_packet *ap);
 void kab_free(keyed_ap_buffer *kab);

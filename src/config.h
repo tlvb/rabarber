@@ -5,6 +5,7 @@ typedef struct {
 	uint32_t  bitrate_bps;
 	uint32_t  packetlen_us;
 	uint32_t  prebuffer_amount;
+	uint32_t  output_latency_us;
 	uint32_t  input_latency_us;
 
 	// derived values, not read from config

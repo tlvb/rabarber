@@ -23,9 +23,14 @@ bool am_setup(audio_manager *am, const audio_config *ac) { /*{{{*/
 }/*}}}*/
 bool setup_alsa_output(audio_manager *am) { /*{{{*/
 	snd_pcm_open(&am->alsa.output, am->cfg->output_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
-	snd_pcm_set_params(am->alsa.output, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED, 1, am->cfg->fs_Hz, 1, am->cfg->input_latency_us);
+	snd_pcm_set_params(am->alsa.output, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED, 1, am->cfg->fs_Hz, 1, am->cfg->output_latency_us);
 	return true;
 }/*}}}*/
+bool setup_alsa_input(audio_manager *am) { /*{{{*/
+	snd_pcm_open(&am->alsa.input, am->cfg->output_device, SND_PCM_STREAM_CAPTURE, SND_PCM_NONBLOCK);
+	snd_pcm_set_params(am->alsa.input, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED, 1, am->cfg->fs_Hz, 1, am->cfg->input_latency_us);
+	return true;
+} /*}}}*/
 bool shutdown_alsa_output(audio_manager *am) { /*{{{*/
 	fprintf(stderr, "%p\n", am);
 	return true;
@@ -211,3 +216,35 @@ bool interpret_contents(audio_packet *ap) { /*{{{*/
 	}
 	return false;
 }/*}}}*/
+audio_packet *build_opus_packet_from_captured_data(audio_manager *am) {
+	audio_packet *ap = get_audio_packet(am, 256);
+	assert(ap != NULL);
+	assert(ap->data != NULL);
+
+	uint8_t *dptr  = ap->data + 6; // leave space for the packet len and type in the beginning
+	size_t   left  = ap->dsz-6;
+	size_t   delta = 0;
+
+	if (ap->type == PING) {
+		*dptr = ap->type;
+		assert(false);
+		//tbd
+	}
+	else {
+		*dptr = ap->type | (ap->target & 0x1f);
+		--left;
+		delta = varint_encode(dptr, left, ap->audio.seq);
+		if (ap->type == OPUS) {
+
+		}
+		else {
+			assert(false);
+		}
+	}
+
+
+
+
+
+
+

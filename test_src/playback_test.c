@@ -41,7 +41,7 @@ int main(void) {
 	ac.bitrate_bps = 20000;
 	ac.packetlen_us = 20000;
 	ac.prebuffer_amount = 2;
-	ac.input_latency_us = 2000;
+	ac.output_latency_us = 2000;
 
 	ac.packetlen_samples = ac.fs_Hz * ac.packetlen_us / 1000000;
 
