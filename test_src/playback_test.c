@@ -7,6 +7,7 @@ int main(void) {
 
 	audio_config ac;
 	ac.output_device = "default";
+	ac.input_device = "default";
 	ac.fs_Hz = 48000;
 	ac.bitrate_bps = 20000;
 	ac.packetlen_us = 20000;
@@ -70,10 +71,10 @@ int main(void) {
 			noisepacket->audio.sid = 2;
 			ap_post(&am, noisepacket);
 
-			for (uint8_t i=0; i<(ac.packetlen_samples>120?120:ac.packetlen_samples); i+=2) {
-				printwave(sine[i], sine[i+1]);
+			for (uint8_t i=0; i<(ac.packetlen_samples>240?240:ac.packetlen_samples); i+=4) {
+				printwave(sine[i], sine[i+1], sine[i+2], sine[i+3]);
 				printf("  ][  ");
-				printwave(noise[i], noise[i+1]);
+				printwave(noise[i], noise[i+1], noise[i+2], noise[i+3]);
 				putchar('\n');
 			}
 			fprint_audio_packet(stderr, noisepacket);
@@ -88,7 +89,7 @@ int main(void) {
 		needsdata = kab_lsize(&am.play.buffer_list) == 0;
 		for (kab_iter kit = SLL_ISTART(&am.play.buffer_list); !kab_iisend(&kit); kab_inext(&kit)) {
 			keyed_ap_buffer *kab = kab_iget(&kit);
-			printf("buffer %" PRIu16 " size: %zu\n", kab->key, ap_lsize(&kab->buffer));
+			printf("buffer %" PRIi64 " size: %zu\n", kab->key, ap_lsize(&kab->buffer));
 			if (ap_lsize(&kab->buffer) < 4) {
 				needsdata = true;
 			}
