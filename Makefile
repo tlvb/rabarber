@@ -2,19 +2,28 @@ vpath %.h src/
 vpath %.c src/
 vpath %.c test_src/
 
-CFLAGS += -g -O0
+CFLAGS += -g
 CFLAGS += -Werror -Wall -Wextra -Wshadow -Wpointer-arith -Wcast-align -Wstrict-prototypes -Wcast-qual -Wunreachable-code
 CFLAGS += -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIE -pie
 CFLAGS += -Wl,-z,relro -Wl,-z,now
 
-libraries = opus asound m
+test_binaries = playback_test capture_test
+libraries = opus asound
+test_libraries = m
 objs = audio.o config.o config_core.o varint.o
+test_objs = util.o
 libparams = $(addprefix -l,$(libraries))
+test_libparams = $(addprefix -l,$(test_libraries))
 
-.PHONY: playback_test
+.PHONY: test_binaries
+test_binaries: $(test_binaries)
 
-playback_test: playback_test.o $(objs)
-	$(CC) $(CFLAGS) -o $@ $^ $(libparams)
+
+capture_test: capture_test.o $(objs) $(test_objs)
+	$(CC) $(CFLAGS) -o $@ $^ $(libparams) $(test_libparams)
+
+playback_test: playback_test.o $(objs) $(test_objs)
+	$(CC) $(CFLAGS) -o $@ $^ $(libparams) $(test_libparams)
 
 config.o: config.c config.h config_core.h
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -27,4 +36,4 @@ audio.o: audio.c audio.h sll_meta.h config.h
 
 .PHONY: clean
 clean:
-	rm *.o || true
+	rm *.o $(test_binaries) || true

@@ -1,38 +1,8 @@
 #include "../src/audio.h"
 #include <math.h>
 #include <opus/opus.h>
+#include "util.h"
 
-void printwave(int16_t s);
-void printwave(int16_t s) { /*{{{*/
-	int16_t v = s/2000;
-	if (v < 0) {
-		for(int i=0; i<16+v; ++i) {
-			printf(" ");
-		}
-		for(int i=0; i<-v; ++i) {
-			printf("#");
-		}
-	}
-	else {
-		for (int i=0; i<16; ++i) {
-			printf(" ");
-		}
-	}
-	printf("|");
-	if (v > 0) {
-		for(int i=0; i<v; ++i) {
-			printf("#");
-		}
-		for(int i=0; i<16-v; ++i) {
-			printf(" ");
-		}
-	}
-	else {
-		for (int i=0; i<16; ++i) {
-			printf(" ");
-		}
-	}
-} /*}}}*/
 int main(void) {
 
 	audio_config ac;
@@ -69,7 +39,7 @@ int main(void) {
 
 	printf("PLAYBACK\n");
 	for (;;) {
-		printf("needs:%u decoded:%u played:%u\n", needsdata, decoded, played);
+		setpos(1,1);
 
 		if (needsdata) {
 			audio_packet *sinepacket  = ap_pget(&am.audio_pool);
@@ -99,11 +69,24 @@ int main(void) {
 			noisepacket->audio.opus.islast = false;
 			noisepacket->audio.sid = 2;
 			ap_post(&am, noisepacket);
+
+			for (uint8_t i=0; i<(ac.packetlen_samples>120?120:ac.packetlen_samples); i+=2) {
+				printwave(sine[i], sine[i+1]);
+				printf("  ][  ");
+				printwave(noise[i], noise[i+1]);
+				putchar('\n');
+			}
+			fprint_audio_packet(stderr, noisepacket);
+			fprint_audio_packet(stderr, sinepacket);
+
+
 		}
+		setpos(65,1);
+		printf("needs:%u decoded:%u played:%u\n", needsdata, decoded, played);
 
 		/* debugging only, we are breaking encapsulation levels here */
-		needsdata = kab_lsize(&am.out.buffer_list) == 0;
-		for (kab_iter kit = SLL_ISTART(&am.out.buffer_list); !kab_iisend(&kit); kab_inext(&kit)) {
+		needsdata = kab_lsize(&am.play.buffer_list) == 0;
+		for (kab_iter kit = SLL_ISTART(&am.play.buffer_list); !kab_iisend(&kit); kab_inext(&kit)) {
 			keyed_ap_buffer *kab = kab_iget(&kit);
 			printf("buffer %" PRIu16 " size: %zu\n", kab->key, ap_lsize(&kab->buffer));
 			if (ap_lsize(&kab->buffer) < 4) {
@@ -111,8 +94,6 @@ int main(void) {
 			}
 		}
 
-		//fprint_audio_packet(stderr, noisepacket);
-		//fprint_audio_packet(stderr, sinepacket);
 
 		decoded = decode_and_mix(&am);
 		played = write_alsa_output(&am);

@@ -18,23 +18,27 @@
 
 typedef struct audio_packet {
 	SLL_LINK(audio_packet);
-	uint8_t  *data;
-	uint16_t  dsz;  // if we need more than 0xffff bytes something is seriously wrong
-	uint8_t   type;
+	uint8_t *data;
+	size_t   dsz;
+	uint8_t  type;
 	union {
 		struct {
 			int64_t timestamp;
 		} ping;
 		struct {
-			uint8_t target;
-			uint16_t sid; // varint in protocol but assumed to not use the full range
-			uint16_t seq; // also varint but it makes no sense to have to keep track of 64 bits' worth of packets
+			uint8_t  target;
+			int64_t sid;
+			int64_t seq;
 			struct {
 				uint8_t *data;
-				uint16_t len; // protocol specifies max len of 0x1fff;
+				int16_t len; // protocol specifies max len of 0x1fff;
 				bool islast;
 			} opus;
 		} audio;
+		struct {
+			uint8_t *data;
+			uint16_t len;
+		} raw;
 	};
 } audio_packet;
 
@@ -43,7 +47,7 @@ SLL_POOL_DECLS(ap, audio_packet, ap_list, ap_pool);
 
 typedef struct keyed_ap_buffer {
 	SLL_LINK(keyed_ap_buffer);
-	uint16_t key;
+	int64_t key;
 	bool prebuffering;
 	ap_list buffer;
 	OpusDecoder *decoder;
@@ -66,10 +70,17 @@ typedef struct {
 		int16_t *pcmbuf;
 		size_t   pcmri;
 
-	} out;
+	} play;
 	struct {
 		int16_t *pcmbuf;
-	} in;
+		size_t   pcmwi;
+		OpusEncoder *encoder;
+
+		uint8_t target;
+		int64_t sid;
+		int64_t seq;
+		bool    islast;
+	} cap;
 	struct {
 		snd_pcm_t *output;
 		snd_pcm_t *input;
@@ -86,6 +97,9 @@ void kab_free(keyed_ap_buffer *kab);
 void ap_post(audio_manager *am, audio_packet *ap);
 bool decode_and_mix(audio_manager *am);
 bool write_alsa_output(audio_manager *am);
+bool get_alsa_input(audio_manager *am);
 
 void fprint_audio_packet(FILE *f, const audio_packet *ap);
-bool interpret_contents(audio_packet *ap);
+bool interpret_contents(audio_packet *ap, bool local);
+
+audio_packet *build_opus_packet_from_captured_data(audio_manager *am);
