@@ -1,4 +1,6 @@
 playback_test
+capture_test
+capture_and_playback_test
 *.o
 
 # these are symlinks to elsewhere

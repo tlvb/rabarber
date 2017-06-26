@@ -7,7 +7,7 @@ CFLAGS += -Werror -Wall -Wextra -Wshadow -Wpointer-arith -Wcast-align -Wstrict-p
 CFLAGS += -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIE -pie
 CFLAGS += -Wl,-z,relro -Wl,-z,now
 
-test_binaries = playback_test capture_test
+test_binaries = playback_test capture_test capture_and_playback_test
 libraries = opus asound
 test_libraries = m
 objs = audio.o config.o config_core.o varint.o
@@ -18,6 +18,8 @@ test_libparams = $(addprefix -l,$(test_libraries))
 .PHONY: test_binaries
 test_binaries: $(test_binaries)
 
+capture_and_playback_test: capture_and_playback_test.o $(objs) $(test_objs)
+	$(CC) $(CFLAGS) -o $@ $^ $(libparams) $(test_libparams)
 
 capture_test: capture_test.o $(objs) $(test_objs)
 	$(CC) $(CFLAGS) -o $@ $^ $(libparams) $(test_libparams)
