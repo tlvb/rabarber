@@ -18,7 +18,8 @@ int main(void) {
 
 	audio_manager am = {0};
 
-	am_setup(&am, &ac);
+	p_pool packet_pool = {0};
+	am_setup(&am, &ac, &packet_pool);
 
 	printf("CAPTURE\n");
 	bool caughtsomething = false;
@@ -39,7 +40,7 @@ int main(void) {
 		if (ap != NULL) {
 			interpret_contents(ap, true);
 			printf("post interp:  "); fprint_audio_packet(stdout, ap);
-			ap_preturn(&am.audio_pool, ap);
+			p_preturn(&packet_pool, ap);
 			ap = NULL;
 		}
 

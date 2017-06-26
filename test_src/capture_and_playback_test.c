@@ -18,7 +18,8 @@ int main(void) {
 
 	audio_manager am = {0};
 
-	am_setup(&am, &ac);
+	p_pool packet_pool = {0};
+	am_setup(&am, &ac, &packet_pool);
 
 	printf("CAPTURE\n");
 	bool caughtsomething = false;

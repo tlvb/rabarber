@@ -18,7 +18,9 @@ int main(void) {
 
 	audio_manager am = {0};
 
-	am_setup(&am, &ac);
+	p_pool packet_pool = {0};
+
+	am_setup(&am, &ac, &packet_pool);
 
 
 	int16_t sine[ac.packetlen_samples];
@@ -43,32 +45,32 @@ int main(void) {
 		setpos(1,1);
 
 		if (needsdata) {
-			audio_packet *sinepacket  = ap_pget(&am.audio_pool);
-			if (sinepacket->audio.opus.data == NULL) {
-				sinepacket->audio.opus.data = malloc(100*sizeof(uint8_t));
+			audio_packet *sinepacket  = p_pget(am.packet_pool);
+			if (sinepacket->opus.data == NULL) {
+				sinepacket->opus.data = malloc(100*sizeof(uint8_t));
 			}
 			for (size_t i=0; i<ac.packetlen_samples; ++i) {
 				sine[i] = INT16_MAX * sin(M_PI*2*t*440/ac.fs_Hz);
 				t+=1;
 			}
 			sinepacket->type = OPUS;
-			sinepacket->audio.opus.len = opus_encode(sineoe, sine, ac.packetlen_samples, sinepacket->audio.opus.data, 100);
-			sinepacket->audio.opus.islast = false;
-			sinepacket->audio.sid = 1;
+			sinepacket->opus.len = opus_encode(sineoe, sine, ac.packetlen_samples, sinepacket->opus.data, 100);
+			sinepacket->opus.islast = false;
+			sinepacket->opus.sid = 1;
 
 			ap_post(&am, sinepacket);
 
-			audio_packet *noisepacket = ap_pget(&am.audio_pool);
-			if (noisepacket->audio.opus.data == NULL) {
-				noisepacket->audio.opus.data = malloc(100*sizeof(uint8_t));
+			audio_packet *noisepacket = p_pget(am.packet_pool);
+			if (noisepacket->opus.data == NULL) {
+				noisepacket->opus.data = malloc(100*sizeof(uint8_t));
 			}
 			for (size_t i=0; i<ac.packetlen_samples; ++i) {
 				noise[i] = (int16_t) (rand()&0xffff);
 			}
 			noisepacket->type = OPUS;
-			noisepacket->audio.opus.len = opus_encode(noiseoe, noise, ac.packetlen_samples, noisepacket->audio.opus.data, 100);
-			noisepacket->audio.opus.islast = false;
-			noisepacket->audio.sid = 2;
+			noisepacket->opus.len = opus_encode(noiseoe, noise, ac.packetlen_samples, noisepacket->opus.data, 100);
+			noisepacket->opus.islast = false;
+			noisepacket->opus.sid = 2;
 			ap_post(&am, noisepacket);
 
 			for (uint8_t i=0; i<(ac.packetlen_samples>240?240:ac.packetlen_samples); i+=4) {
@@ -89,8 +91,8 @@ int main(void) {
 		needsdata = kab_lsize(&am.play.buffer_list) == 0;
 		for (kab_iter kit = SLL_ISTART(&am.play.buffer_list); !kab_iisend(&kit); kab_inext(&kit)) {
 			keyed_ap_buffer *kab = kab_iget(&kit);
-			printf("buffer %" PRIi64 " size: %zu\n", kab->key, ap_lsize(&kab->buffer));
-			if (ap_lsize(&kab->buffer) < 4) {
+			printf("buffer %" PRIi64 " size: %zu\n", kab->key, p_lsize(&kab->buffer));
+			if (p_lsize(&kab->buffer) < 4) {
 				needsdata = true;
 			}
 		}
