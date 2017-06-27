@@ -19,7 +19,6 @@ int main(void) {
 	audio_manager am = {0};
 
 	p_pool packet_pool = {0};
-
 	am_setup(&am, &ac, &packet_pool);
 
 

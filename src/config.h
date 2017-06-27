@@ -1,3 +1,13 @@
+#pragma once
+#include <inttypes.h>
+typedef struct {
+	char *server_hostport;
+	char *server_password;
+	char *user_name;
+	char *client_cert;
+	char *client_key;
+	char *server_cert;
+} network_config;
 typedef struct {
 	char     *input_device;
 	char     *output_device;
@@ -14,5 +24,6 @@ typedef struct {
 } audio_config;
 
 typedef struct {
+	network_config network;
 	audio_config audio;
 } config;

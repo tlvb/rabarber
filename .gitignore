@@ -1,7 +1,12 @@
 playback_test
 capture_test
 capture_and_playback_test
+connection_test
 *.o
+
+# these contain passwords (private)
+con_test
+con_gdb
 
 # these are symlinks to elsewhere
 src/config_core.c
@@ -9,4 +14,8 @@ src/config_core.h
 src/sll_meta.h
 src/varint.c
 src/varint.h
+src/mumble_pb.c
+src/mumble_pb.h
 
+# these contain private data
+cert/*
