@@ -44,7 +44,7 @@ int main(void) {
 		setpos(1,1);
 
 		if (needsdata) {
-			audio_packet *sinepacket  = p_pget(am.packet_pool);
+			packet *sinepacket  = p_pget(am.packet_pool);
 			if (sinepacket->opus.data == NULL) {
 				sinepacket->opus.data = malloc(100*sizeof(uint8_t));
 			}
@@ -57,9 +57,9 @@ int main(void) {
 			sinepacket->opus.islast = false;
 			sinepacket->opus.sid = 1;
 
-			ap_post(&am, sinepacket);
+			route_for_playback(&am, sinepacket);
 
-			audio_packet *noisepacket = p_pget(am.packet_pool);
+			packet *noisepacket = p_pget(am.packet_pool);
 			if (noisepacket->opus.data == NULL) {
 				noisepacket->opus.data = malloc(100*sizeof(uint8_t));
 			}
@@ -70,7 +70,7 @@ int main(void) {
 			noisepacket->opus.len = opus_encode(noiseoe, noise, ac.packetlen_samples, noisepacket->opus.data, 100);
 			noisepacket->opus.islast = false;
 			noisepacket->opus.sid = 2;
-			ap_post(&am, noisepacket);
+			route_for_playback(&am, noisepacket);
 
 			for (uint8_t i=0; i<(ac.packetlen_samples>240?240:ac.packetlen_samples); i+=4) {
 				printwave(sine[i], sine[i+1], sine[i+2], sine[i+3]);

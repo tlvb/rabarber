@@ -36,7 +36,7 @@ int main(void) {
 		}
 		setpos(64,1);
 
-		audio_packet *ap = build_opus_packet_from_captured_data(&am);
+		packet *ap = build_opus_packet_from_captured_data(&am);
 		if (ap != NULL) {
 			interpret_contents(ap, true);
 			printf("post interp:  "); fprint_audio_packet(stdout, ap);

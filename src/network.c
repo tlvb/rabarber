@@ -1,4 +1,5 @@
 #include "network.h"
+#include <string.h>
 
 void nm_init(network_manager *nm, const network_config *cfg, p_pool *packet_pool) { /*{{{*/
 	nm->cfg = cfg;
@@ -20,10 +21,10 @@ void nm_init(network_manager *nm, const network_config *cfg, p_pool *packet_pool
 	p_lclear(&nm->egress.queue);
 	nm->egress.current = NULL;
 } /*}}}*/
-bool nm_connect(network_manager *nm) {
+bool nm_connect(network_manager *nm) { /*{{{*/
 	assert(nm != NULL);
 	return sio_con_connect(&nm->connection, nm->cfg->server_hostport);
-}
+} /*}}}*/
 bool nm_read(network_manager *nm) { /*{{{*/
 	if (nm->ingress.current == NULL) {
 		int m = nm->ingress.headerwi;
@@ -43,6 +44,7 @@ bool nm_read(network_manager *nm) { /*{{{*/
 				              | (nm->ingress.header[5]      );
 				nm->ingress.current = get_packet(nm->packet_pool, len);
 				assert(nm->ingress.current != NULL);
+				memcpy(nm->ingress.current->data, nm->ingress.header, 6);
 				nm->ingress.current->raw.type = type;
 				if (len == 0) {
 					p_lpushback(&nm->ingress.queue, nm->ingress.current);
@@ -56,10 +58,13 @@ bool nm_read(network_manager *nm) { /*{{{*/
 			return false;
 		}
 		else {
-			NETWORK_FATAL_IF( n<0, "tried to read up to %d bytes but con_read returned %d\n", n, 6-m);
+			NETWORK_FATAL_IF( n<0, "tried to read up to %d header bytes but con_read returned %d\n", 6-m, n);
 		}
 	}
 	else {
+		// while the packet is filled with data the raw len and data pointers serve as counters for where
+		// and how much data is written, once no more data is to be written, they are reset to point at
+		// the beginning of the data and contain the length of the packet
 		int m = nm->ingress.current->raw.len;
 		int n = sio_con_read(&nm->connection,
 		                     nm->ingress.current->raw.data,
@@ -73,7 +78,7 @@ bool nm_read(network_manager *nm) { /*{{{*/
 				nm->ingress.current->raw.len = nm->ingress.current->raw.data - nm->ingress.current->data;
 				nm->ingress.current->raw.data = nm->ingress.current->data;
 				p_lpushback(&nm->ingress.queue, nm->ingress.current);
-				nm->ingress.current = NULL;
+				nm->ingress.current  = NULL;
 			}
 		}
 		else if (n == 0) {
@@ -81,7 +86,7 @@ bool nm_read(network_manager *nm) { /*{{{*/
 			return false;
 		}
 		else {
-			NETWORK_FATAL_IF( n<0, "tried to read up to %d bytes but con_read returned %d\n", m, n);
+			NETWORK_FATAL_IF( n<0, "tried to read up to %d payload bytes but con_read returned %d\n", m, n);
 		}
 	}
 	return false;
@@ -103,7 +108,7 @@ bool nm_write(network_manager *nm) { /*{{{*/
 		nm->egress.current->raw.data += n;
 		nm->egress.current->raw.len  -= n;
 		if (nm->egress.current->raw.len == 0) {
-			p_preturn(nm->packet_pool, nm->egress.current);
+			nm_recycle(nm, nm->egress.current);
 			nm->egress.current = NULL;
 		}
 		return true;

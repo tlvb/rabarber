@@ -14,8 +14,6 @@
 #define USER_WHISPER 2
 #define LOOPBACK 31
 
-typedef packet audio_packet;
-
 typedef struct keyed_ap_buffer {
 	SLL_LINK(keyed_ap_buffer);
 	int64_t key;
@@ -48,7 +46,6 @@ typedef struct {
 		OpusEncoder *encoder;
 
 		uint8_t target;
-		int64_t sid;
 		int64_t seq;
 		bool    islast;
 	} cap;
@@ -63,15 +60,15 @@ bool am_setup(audio_manager *am, const audio_config *ac, p_pool *pool);
 bool setup_alsa_output(audio_manager *am);
 bool setup_alsa_input(audio_manager *am);
 bool shutdown_alsa_output(audio_manager *am);
-void ap_free(audio_packet *ap);
 void kab_free(keyed_ap_buffer *kab);
 
-void ap_post(audio_manager *am, audio_packet *ap);
+void route_for_playback(audio_manager *am, packet *p);
 bool decode_and_mix(audio_manager *am);
 bool write_alsa_output(audio_manager *am);
 bool get_alsa_input(audio_manager *am);
 
-void fprint_audio_packet(FILE *f, const audio_packet *ap);
-bool interpret_contents(audio_packet *ap, bool local);
+void fprint_audio_packet(FILE *f, const packet *p);
+bool interpret_contents(packet *ap, bool local);
 
-audio_packet *build_opus_packet_from_captured_data(audio_manager *am);
+packet *build_opus_packet_from_captured_data(audio_manager *am);
+void dissect_outgoing_opus_packet(const packet *p);

@@ -1,8 +1,10 @@
 #include "audio.h"
 #include <string.h>
 #include <math.h>
+#include "../test_src/util.h"
 
 #define AUDIO_FAIL_IF(cond, ...) if (cond) { fprintf(stderr, "(EE) AUDIO: " __VA_ARGS__); return false; }
+#define AUDIO_WARN_IF(cond, ...) if (cond) { fprintf(stderr, "(WW) AUDIO: " __VA_ARGS__); }
 
 // max size of outgoing opus audio packet minus the encoded payload data
 // packet header      2
@@ -32,16 +34,21 @@ bool am_setup(audio_manager *am, const audio_config *ac, p_pool *pool) { /*{{{*/
 	am->cap.encoder = opus_encoder_create(am->cfg->fs_Hz, 1, OPUS_APPLICATION_VOIP, &e);
 	assert(e == OPUS_OK);
 	opus_encoder_ctl(am->cap.encoder, OPUS_SET_BITRATE(am->cfg->bitrate_bps));
+	opus_encoder_ctl(am->cap.encoder, OPUS_SET_INBAND_FEC(1));
 	return setup_alsa_output(am) && setup_alsa_input(am);
 }/*}}}*/
 bool setup_alsa_output(audio_manager *am) { /*{{{*/
-	snd_pcm_open(&am->alsa.output, am->cfg->output_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
-	snd_pcm_set_params(am->alsa.output, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED, 1, am->cfg->fs_Hz, 1, am->cfg->output_latency_us);
+	AUDIO_FAIL_IF( 0 != snd_pcm_open(&am->alsa.output, am->cfg->output_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK),
+	              "could not open output device %s\n", am->cfg->output_device);
+	AUDIO_FAIL_IF( 0 != snd_pcm_set_params(am->alsa.output, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED, 1, am->cfg->fs_Hz, 1, am->cfg->output_latency_us),
+	              "could not configure output device %s\n", am->cfg->output_device);
 	return true;
 }/*}}}*/
 bool setup_alsa_input(audio_manager *am) { /*{{{*/
-	snd_pcm_open(&am->alsa.input, am->cfg->input_device, SND_PCM_STREAM_CAPTURE, SND_PCM_NONBLOCK);
-	snd_pcm_set_params(am->alsa.input, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED, 1, am->cfg->fs_Hz, 1, am->cfg->input_latency_us);
+	AUDIO_FAIL_IF( 0 != snd_pcm_open(&am->alsa.input, am->cfg->input_device, SND_PCM_STREAM_CAPTURE, SND_PCM_NONBLOCK),
+	              "could not open input device %s\n", am->cfg->input_device);
+	AUDIO_FAIL_IF( 0 != snd_pcm_set_params(am->alsa.input, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED, 1, am->cfg->fs_Hz, 1, am->cfg->input_latency_us),
+	              "could not configure input device %s\n", am->cfg->input_device);
 	return true;
 } /*}}}*/
 bool shutdown_alsa_output(audio_manager *am) { /*{{{*/
@@ -51,12 +58,12 @@ bool shutdown_alsa_output(audio_manager *am) { /*{{{*/
 
 void kab_free(keyed_ap_buffer *kab) { /*{{{*/
 	while (p_lsize(&kab->buffer) > 0) {
-		audio_packet *ap = p_lpopfront(&kab->buffer);
+		packet *ap = p_lpopfront(&kab->buffer);
 		p_free(ap);
 	}
 	free(kab);
 } /*}}}*/
-void ap_post(audio_manager *am, audio_packet *ap) { /*{{{*/
+void route_for_playback(audio_manager *am, packet *ap) { /*{{{*/
 	keyed_ap_buffer *kab = NULL;
 	for (kab_iter kit=SLL_ISTART(&am->play.buffer_list); !kab_iisend(&kit); kab_inext(&kit)) {
 		kab = kab_iget(&kit);
@@ -95,17 +102,20 @@ bool decode_and_mix(audio_manager *am) { /*{{{*/
 		// so we cannot yet write anything to the buffer
 		return false;
 	}
+	//printf("b\n");
 	bool decoded = false;
 	for (kab_iter kit=SLL_ISTART(&am->play.buffer_list); !kab_iisend(&kit); kab_inext(&kit)) {
 		kab = kab_iget(&kit);
+		//printf("c %" PRIi64 "\n", kab->key);
 		if ((!kab->prebuffering) || (p_lsize(&kab->buffer) > am->cfg->prebuffer_amount)) {
 			kab->prebuffering = false;
-			audio_packet *ap = p_lpopfront(&kab->buffer);
+			packet *ap = p_lpopfront(&kab->buffer);
 			if (ap != NULL) {
 				decoded = true;
 				int n = opus_decode(kab->decoder, ap->opus.data, ap->opus.len, am->play.pcmbuf, am->cfg->packetlen_samples, 0);
 				p_preturn(am->packet_pool, ap);
-				assert(n > 0);
+
+				AUDIO_WARN_IF(n <= 0, "opus packet decoding error for from sid %" PRIi64 "\n", kab->key);
 
 				for(size_t i=0; i<(size_t)n; ++i) {
 					am->play.mixbuf[i] += am->play.pcmbuf[i];
@@ -120,6 +130,17 @@ bool decode_and_mix(audio_manager *am) { /*{{{*/
 	}
 	// clip
 	if (decoded) {
+#ifdef PRINTWAVE
+		setpos(1,1);
+		for (size_t i=0; i<(am->cfg->packetlen_samples>200?200:am->cfg->packetlen_samples); i+=4) {
+			printwave(am->play.pcmbuf[i  ],
+                                  am->play.pcmbuf[i+1],
+                                  am->play.pcmbuf[i+2],
+                                  am->play.pcmbuf[i+3]);
+			putchar('\n');
+
+		}
+#endif
 		for (size_t i=0; i<am->cfg->packetlen_samples; ++i) {
 			if (am->play.mixbuf[i] > INT16_MAX) {
 				am->play.pcmbuf[i] = INT16_MAX;
@@ -173,8 +194,7 @@ bool get_alsa_input(audio_manager *am) { /*{{{*/
 	}
 	return true;
 } /*}}}*/
-
-void fprint_audio_packet(FILE *f, const audio_packet *ap) { /*{{{*/
+void fprint_audio_packet(FILE *f, const packet *ap) { /*{{{*/
 	assert(ap != NULL);
 
 	if (ap->type == PING) {
@@ -195,7 +215,7 @@ void fprint_audio_packet(FILE *f, const audio_packet *ap) { /*{{{*/
 		        ap->type);
 	}
 } /*}}}*/
-bool interpret_contents(audio_packet *ap, bool local) { /*{{{*/
+bool interpret_contents(packet *ap, bool local) { /*{{{*/
 	assert(ap != NULL);
 	assert(ap->data != NULL);
 
@@ -209,7 +229,7 @@ bool interpret_contents(audio_packet *ap, bool local) { /*{{{*/
 		varint_decode(&ap->ping.timestamp, dptr, left);
 		return true;
 	}
-	else {
+	else if (ap->type == OPUS) {
 		ap->opus.target = dptr[0] & 0x1f;
 		left -= 1; dptr += 1;
 
@@ -238,15 +258,18 @@ bool interpret_contents(audio_packet *ap, bool local) { /*{{{*/
 			return true;
 		}
 	}
+	else {
+		AUDIO_FAIL_IF(ap->type != PING && ap->type != OPUS, "packet type is not implemented: 0x%02u\n", ap->type);
+	}
 	return false;
 }/*}}}*/
-audio_packet *build_opus_packet_from_captured_data(audio_manager *am) { /*{{{*/
+packet *build_opus_packet_from_captured_data(audio_manager *am) { /*{{{*/
 
 	if (am->cap.pcmwi < am->cfg->packetlen_samples) { return NULL; }
 	am->cap.pcmwi = 0;
 
 	const size_t enc_len_est = am->cfg->packetlen_us * am->cfg->bitrate_bps / 8000000;
-	audio_packet *ap = get_packet(am->packet_pool, AP_OUT_STATICS_UB + enc_len_est*3/2);
+	packet *ap = get_packet(am->packet_pool, AP_OUT_STATICS_UB + enc_len_est*3/2);
 
 	uint8_t metadata[AP_OUT_STATICS_UB];
 
@@ -255,8 +278,8 @@ audio_packet *build_opus_packet_from_captured_data(audio_manager *am) { /*{{{*/
 
 	ap->type = OPUS;
 	ap->opus.target = am->cap.target;
-	ap->opus.sid    = am->cap.sid;
-	ap->opus.seq    = am->cap.seq++; // ++ !
+	ap->opus.seq    = am->cap.seq;
+	am->cap.seq += 2;
 	ap->opus.islast = am->cap.islast;
 
 	uint16_t m = 2+4;
@@ -270,27 +293,56 @@ audio_packet *build_opus_packet_from_captured_data(audio_manager *am) { /*{{{*/
 
 	m += varint_encode(&metadata[m], 9, (ap->opus.islast ? 0x2000 : 0x0000) | n);
 
+	ap->raw.data = ap->data+AP_OUT_STATICS_UB-m;
+	ap->raw.len  = m + n;
+	uint32_t plen = ap->raw.len-6;
+	ap->raw.type = 1;
 
-	// packet type 0x0001 = UDP tunnel, network byte order;
-	metadata[0] = 0x00;
-	metadata[1] = 0x01;
-	// packet length #### network byte order
-	metadata[2] = (ap->raw.len >> 24) & 0xff;
-	metadata[3] = (ap->raw.len >> 16) & 0xff;
-	metadata[4] = (ap->raw.len >>  8) & 0xff;
-	metadata[5] = (ap->raw.len      ) & 0xff;
-
+	metadata[0] = (ap->raw.type >> 8) & 0xff;
+	metadata[1] = (ap->raw.type     ) & 0xff;
+	metadata[2] = (plen >> 24) & 0xff;
+	metadata[3] = (plen >> 16) & 0xff;
+	metadata[4] = (plen >>  8) & 0xff;
+	metadata[5] = (plen      ) & 0xff;
 	for (uint16_t i=0; i<m; ++i) {
 		ap->data[AP_OUT_STATICS_UB-m+i] = metadata[i];
 	}
 
-	ap->raw.data = ap->data+AP_OUT_STATICS_UB-m;
-	ap->raw.len  = m + n;
 
 	return ap;
 } /*}}}*/
 
+void dissect_outgoing_opus_packet(const packet *p) { /*{{{*/
+	const uint8_t *dp = p->raw.data;
 
+	uint16_t type = ((dp[0] >> 8) & 0xff) | dp[1];
+	uint32_t len  = ((dp[2] << 24) & 0xff) | ((dp[3] << 16) & 0xff) | ((dp[4] << 8) & 0xff) | ((dp[5] & 0xff));
+	uint8_t  typetarget = dp[6];
+
+	uint8_t atype = typetarget & 0xe0;
+	uint8_t target = typetarget & 0x1f;
+
+	size_t d1 = 0, d2 = 0;
+
+	int64_t seqno = 0; d1 = varint_decode(&seqno, &dp[7], 9);
+
+	int64_t lth   = 0; d2 = varint_decode(&lth, &dp[7+d1], 9);
+
+	bool last = (lth & 0x2000) != 0;
+
+	size_t dplen = lth & 0x1fff;
+	size_t mplen = len - (7+d1+d2);
+
+	printf("[H| T:%" PRIu16 " L:%" PRIu32 " |P| at:%x tg:%x sn:%" PRIi64 " l:%u dpl:%zu cpl:%zu]\n",
+	       type,
+	       len,
+	       atype,
+	       target,
+	       seqno,
+	       last,
+	       dplen,
+	       mplen);
+} /*}}}*/
 
 
 

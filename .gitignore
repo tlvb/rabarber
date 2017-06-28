@@ -2,11 +2,13 @@ playback_test
 capture_test
 capture_and_playback_test
 connection_test
+network_and_audio_test
 *.o
 
 # these contain passwords (private)
 con_test
 con_gdb
+naa_test
 
 # these are symlinks to elsewhere
 src/config_core.c
