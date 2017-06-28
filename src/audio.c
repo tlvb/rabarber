@@ -1,7 +1,7 @@
 #include "audio.h"
 #include <string.h>
 #include <math.h>
-#include "../test_src/util.h"
+#include "util.h"
 
 #define AUDIO_FAIL_IF(cond, ...) if (cond) { fprintf(stderr, "(EE) AUDIO: " __VA_ARGS__); return false; }
 #define AUDIO_WARN_IF(cond, ...) if (cond) { fprintf(stderr, "(WW) AUDIO: " __VA_ARGS__); }
@@ -131,8 +131,8 @@ bool decode_and_mix(audio_manager *am) { /*{{{*/
 	// clip
 	if (decoded) {
 #ifdef PRINTWAVE
-		setpos(1,1);
-		for (size_t i=0; i<(am->cfg->packetlen_samples>200?200:am->cfg->packetlen_samples); i+=4) {
+		setpos(26,1);
+		for (size_t i=0; i<(am->cfg->packetlen_samples>100?100:am->cfg->packetlen_samples); i+=4) {
 			printwave(am->play.pcmbuf[i  ],
                                   am->play.pcmbuf[i+1],
                                   am->play.pcmbuf[i+2],
@@ -268,6 +268,19 @@ packet *build_opus_packet_from_captured_data(audio_manager *am) { /*{{{*/
 	if (am->cap.pcmwi < am->cfg->packetlen_samples) { return NULL; }
 	am->cap.pcmwi = 0;
 
+#ifdef PRINTWAVE
+		setpos(1,1);
+		for (size_t i=0; i<(am->cfg->packetlen_samples>100?100:am->cfg->packetlen_samples); i+=4) {
+			printwave(am->cap.pcmbuf[i  ],
+                                  am->cap.pcmbuf[i+1],
+                                  am->cap.pcmbuf[i+2],
+                                  am->cap.pcmbuf[i+3]);
+			putchar('\n');
+
+		}
+#endif
+
+
 	const size_t enc_len_est = am->cfg->packetlen_us * am->cfg->bitrate_bps / 8000000;
 	packet *ap = get_packet(am->packet_pool, AP_OUT_STATICS_UB + enc_len_est*3/2);
 
@@ -307,7 +320,6 @@ packet *build_opus_packet_from_captured_data(audio_manager *am) { /*{{{*/
 	for (uint16_t i=0; i<m; ++i) {
 		ap->data[AP_OUT_STATICS_UB-m+i] = metadata[i];
 	}
-
 
 	return ap;
 } /*}}}*/

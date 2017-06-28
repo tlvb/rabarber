@@ -1,7 +1,7 @@
 #include "../src/audio.h"
+#include "../src/util.h"
 #include <math.h>
 #include <opus/opus.h>
-#include "util.h"
 
 int main(void) {
 
@@ -72,12 +72,6 @@ int main(void) {
 			noisepacket->opus.sid = 2;
 			route_for_playback(&am, noisepacket);
 
-			for (uint8_t i=0; i<(ac.packetlen_samples>240?240:ac.packetlen_samples); i+=4) {
-				printwave(sine[i], sine[i+1], sine[i+2], sine[i+3]);
-				printf("  ][  ");
-				printwave(noise[i], noise[i+1], noise[i+2], noise[i+3]);
-				putchar('\n');
-			}
 			fprint_audio_packet(stderr, noisepacket);
 			fprint_audio_packet(stderr, sinepacket);
 

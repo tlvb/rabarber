@@ -1,7 +1,7 @@
 #include "../src/audio.h"
+#include "../src/util.h"
 #include <math.h>
 #include <opus/opus.h>
-#include "util.h"
 
 int main(void) {
 
@@ -27,14 +27,6 @@ int main(void) {
 		setpos(1,1);
 
 		caughtsomething = get_alsa_input(&am);
-		//printf("%08zu\n", am.cap.pcmwi);
-		if (am.cap.pcmwi == ac.packetlen_samples) {
-			for (uint8_t i=0; i<(ac.packetlen_samples>240?240:ac.packetlen_samples); i+=4) {
-				printwave(am.cap.pcmbuf[i], am.cap.pcmbuf[i+1], am.cap.pcmbuf[i+2], am.cap.pcmbuf[i+3]);
-				putchar('\n');
-			}
-		}
-		setpos(64,1);
 
 		packet *ap = build_opus_packet_from_captured_data(&am);
 		if (ap != NULL) {

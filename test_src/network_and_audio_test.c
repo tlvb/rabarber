@@ -251,7 +251,6 @@ int main(int argc, char **argv) {
 		packet *ap = build_opus_packet_from_captured_data(&am);
 		if (ap != NULL) {
 			if (ap->raw.type == 1) {
-				printf("posting egress\n");
 				nm_post_egress(&nm, ap);
 			}
 			else {
@@ -259,13 +258,6 @@ int main(int argc, char **argv) {
 				nm_recycle(&nm, ap);
 			}
 
-			/*
-			dissect_outgoing_opus_packet(ap);
-			printf("transmitting captured audio packet of type %04" PRIu16 " and length %04" PRIu32 "\n",
-			       ap->raw.type,
-			       ap->raw.len);
-			nm_post_egress(&nm, ap);
-			*/
 			encoded = true;
 		}
 
@@ -295,24 +287,7 @@ int main(int argc, char **argv) {
 
 		bool activity = captured || encoded || transmitted || received || decoded || played;
 
-		/*
-		if (decoded) {
-			printf("> decoded\n");
-		}
-		*/
-		/*
-		if (played) {
-			printf("> played\n");
-		}
-		*/
-
-		/*
-		if (activity) {
-			printf("[c%ue%ut%ur%ud%up%u]\n", captured, encoded, transmitted, received, decoded, played);
-		}
-		*/
 		if (!activity) {
-			//printf("sleeping\n");
 			usleep(1250);
 		}
 
