@@ -3,6 +3,7 @@ capture_test
 capture_and_playback_test
 connection_test
 network_and_audio_test
+lradc_test
 *.o
 
 # these contain passwords (private)
@@ -11,10 +12,12 @@ conf/debug.cfg
 # these contain private data
 cert/*
 
-# just execution scripts
+# just execution scripts etc
 con_test
 con_gdb
 naa_test
+upload.sh
+update.sh
 
 
 # these are symlinks to elsewhere
