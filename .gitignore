@@ -6,9 +6,16 @@ network_and_audio_test
 *.o
 
 # these contain passwords (private)
+conf/debug.cfg
+
+# these contain private data
+cert/*
+
+# just execution scripts
 con_test
 con_gdb
 naa_test
+
 
 # these are symlinks to elsewhere
 src/config_core.c
@@ -19,5 +26,3 @@ src/varint.h
 src/mumble_pb.c
 src/mumble_pb.h
 
-# these contain private data
-cert/*

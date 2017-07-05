@@ -6,14 +6,16 @@ void nm_init(network_manager *nm, const network_config *cfg, p_pool *packet_pool
 	nm->packet_pool = packet_pool;
 	sio_init();
 	sio_con_init(&nm->connection);
-	sio_con_set_certs(&nm->connection,
-	                  nm->cfg->client_cert,
-	                  nm->cfg->client_key,
-	                  nm->cfg->server_cert);
-	VPNETWORK("client cert: %s\nclient key:  %s\nserver cert: %s\n",
-                  nm->cfg->client_cert,
-                  nm->cfg->client_key,
-                  nm->cfg->server_cert);
+	if (nm->cfg->use_certificates) {
+		sio_con_set_certs(&nm->connection,
+				  nm->cfg->certificates.client_cert,
+				  nm->cfg->certificates.client_key,
+				  nm->cfg->certificates.server_cert);
+		VPNETWORK("client cert: %s\nclient key:  %s\nserver cert: %s\n",
+			  nm->cfg->client_cert,
+			  nm->cfg->client_key,
+			  nm->cfg->server_cert);
+	}
 	p_lclear(&nm->ingress.queue);
 	nm->ingress.headerwi = 0;
 	nm->ingress.current  = NULL;

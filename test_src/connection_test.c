@@ -72,24 +72,19 @@ void send_ping_packet(network_manager *nm, time_t t) { /*{{{*/
 
 int main(int argc, char **argv) {
 
-	if (argc != 4) {
-		fprintf(stderr, "needs <host:port> <user_name> and <server_password>\n");
+	if (argc != 2) {
+		fprintf(stderr, "needs config file argument\n");
 		return 1;
-	}
-	for (int i=0; i<argc; ++i) {
-		printf("%d: %s\n", i, argv[i]);
 	}
 
 	p_pool packet_pool = {0};
 	config cfg;
 
-	cfg.network.server_hostport = argv[1];
-	cfg.network.server_password = argv[2];
-	cfg.network.user_name       = argv[3];
-
-	cfg.network.client_cert = "cert/client_cert.pem";
-	cfg.network.client_key  = "cert/client_key.pem";
-	cfg.network.server_cert = "cert/server_cert.pem";
+	if (!load_config_from_file(&cfg, argv[1])) {
+		fprintf(stderr, "config file load error\n");
+		return 1;
+	}
+	print_config_to_stdout(&cfg);
 
 	network_manager nm = {0};
 

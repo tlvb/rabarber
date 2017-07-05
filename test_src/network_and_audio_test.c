@@ -188,34 +188,20 @@ void handle_ingress_packet(network_manager *nm, audio_manager *am, packet *p) { 
 
 int main(int argc, char **argv) {
 
-	if (argc != 4) {
-		fprintf(stderr, "needs <host:port> <user_name> and <server_password>\n");
+	if (argc != 2) {
+		fprintf(stderr, "needs config file argument\n");
 		return 1;
-	}
-	for (int i=0; i<argc; ++i) {
-		printf("%d: %s\n", i, argv[i]);
 	}
 
 	p_pool packet_pool = {0};
 	config cfg;
 
-	cfg.network.server_hostport = argv[1];
-	cfg.network.server_password = argv[2];
-	cfg.network.user_name       = argv[3];
-
-	cfg.network.client_cert = "cert/client_cert.pem";
-	cfg.network.client_key  = "cert/client_key.pem";
-	cfg.network.server_cert = "cert/server_cert.pem";
-
-	cfg.audio.output_device = "default";
-	cfg.audio.input_device = "default";
-	cfg.audio.fs_Hz = 48000;
-	cfg.audio.bitrate_bps = 40000;
-	cfg.audio.packetlen_us = 20000;
-	cfg.audio.prebuffer_amount = 8;
-	cfg.audio.output_latency_us = 2000;
-	cfg.audio.input_latency_us = 2000;
-	cfg.audio.packetlen_samples = cfg.audio.fs_Hz * cfg.audio.packetlen_us / 1000000;
+	if (!load_config_from_file(&cfg, argv[1])) {
+		fprintf(stderr, "config file load error\n");
+		return 1;
+	}
+	print_config_to_stdout(&cfg);
+	printf("packetlen_samples calculated to %u\n", cfg.audio.packetlen_samples);
 
 	network_manager nm = {0};
 
@@ -248,7 +234,8 @@ int main(int argc, char **argv) {
 		captured = get_alsa_input(&am);
 
 		// encode
-		packet *ap = build_opus_packet_from_captured_data(&am);
+		encoded = build_opus_packets_from_captured_data(&nm.egress.queue, &am);
+		/*
 		if (ap != NULL) {
 			if (ap->raw.type == 1) {
 				nm_post_egress(&nm, ap);
@@ -260,6 +247,7 @@ int main(int argc, char **argv) {
 
 			encoded = true;
 		}
+		*/
 
 		// transmit
 		transmitted = nm_write(&nm);

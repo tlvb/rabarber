@@ -70,5 +70,5 @@ bool get_alsa_input(audio_manager *am);
 void fprint_audio_packet(FILE *f, const packet *p);
 bool interpret_contents(packet *ap, bool local);
 
-packet *build_opus_packet_from_captured_data(audio_manager *am);
+bool build_opus_packets_from_captured_data(p_list *packets, audio_manager *am);
 void dissect_outgoing_opus_packet(const packet *p);

@@ -3,14 +3,17 @@ vpath %.c src/
 vpath %.c test_src/
 
 CFLAGS += -g
-CFLAGS += -Werror -Wall -Wextra -Wshadow -Wpointer-arith -Wcast-align -Wstrict-prototypes -Wcast-qual -Wunreachable-code
+CFLAGS += -std=gnu11
+CFLAGS += -Werror -Wall -Wextra -Wshadow -Wpointer-arith -Wstrict-prototypes -Wcast-qual -Wunreachable-code
+#CFLAGS += -Wcast-align # causes errors with protobuf on arm, unsure to what extent it is Bad
 CFLAGS += -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fPIE -pie
 CFLAGS += -Wl,-z,relro -Wl,-z,now
 
-debug_cflags = -DVERBOSE_SSL_IO -DVERBOSE_NETWORK
+#CFLAGS += -DVERBOSE_SSL_IO -DVERBOSE_NETWORK
+CFLAGS += -DVERBOSE_AUDIO
 
 #CFLAGS += $(debug_cflags)
-CFLAGS += -DPRINTWAVE
+CFLAGS += -DPRINTWAVE -DPRINTWAVEDIVISOR=3000 -DPRINTWAVEWIDTH=10 -DPRINTWAVEHEIGHT=40
 
 test_binaries = playback_test capture_test capture_and_playback_test connection_test network_and_audio_test
 libraries = opus asound crypto ssl protobuf-c

@@ -1,12 +1,17 @@
 #pragma once
 #include <inttypes.h>
+#include <stdbool.h>
+typedef struct {
+	char *client_cert;
+	char *client_key;
+	char *server_cert;
+} cert_config;
 typedef struct {
 	char *server_hostport;
 	char *server_password;
 	char *user_name;
-	char *client_cert;
-	char *client_key;
-	char *server_cert;
+	bool use_certificates;
+	cert_config certificates;
 } network_config;
 typedef struct {
 	char     *input_device;
@@ -27,3 +32,6 @@ typedef struct {
 	network_config network;
 	audio_config audio;
 } config;
+
+bool load_config_from_file(config *c, const char* filename);
+void print_config_to_stdout(const config *c);

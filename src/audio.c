@@ -5,6 +5,13 @@
 
 #define AUDIO_FAIL_IF(cond, ...) if (cond) { fprintf(stderr, "(EE) AUDIO: " __VA_ARGS__); return false; }
 #define AUDIO_WARN_IF(cond, ...) if (cond) { fprintf(stderr, "(WW) AUDIO: " __VA_ARGS__); }
+#ifdef VERBOSE_AUDIO
+#define AUDIO_VPRINTF(...) fprintf(stderr, "(DD) AUDIO " __VA_ARGS__)
+#else
+#define AUDIO_VPRINTF(...)
+#endif
+
+#define RECN 4
 
 // max size of outgoing opus audio packet minus the encoded payload data
 // packet header      2
@@ -18,6 +25,10 @@ SLL_DEFS(kab, keyed_ap_buffer, kab_list, kab_free);
 SLL_ITER_DEFS(kab, keyed_ap_buffer, kab_list, kab_iter);
 SLL_POOL_DEFS(kab, keyed_ap_buffer, kab_list, kab_pool);
 
+#ifdef VERBOSE_AUDIO
+static uint16_t capture_eagain_counter = 0;
+#endif
+
 bool am_setup(audio_manager *am, const audio_config *ac, p_pool *pool) { /*{{{*/
 	am->cfg = ac;
 	am->packet_pool = pool;
@@ -27,7 +38,7 @@ bool am_setup(audio_manager *am, const audio_config *ac, p_pool *pool) { /*{{{*/
 	am->play.mixbuf = calloc(am->cfg->packetlen_samples, sizeof(int32_t));
 	am->play.pcmbuf = calloc(am->cfg->packetlen_samples, sizeof(int16_t));
 	am->play.pcmri = 0;
-	am->cap.pcmbuf = calloc(am->cfg->packetlen_samples, sizeof(int16_t));
+	am->cap.pcmbuf = calloc(am->cfg->packetlen_samples*RECN, sizeof(int16_t));
 	am->cap.pcmwi = 0;
 
 	int e;
@@ -130,17 +141,11 @@ bool decode_and_mix(audio_manager *am) { /*{{{*/
 	}
 	// clip
 	if (decoded) {
-#ifdef PRINTWAVE
-		setpos(26,1);
-		for (size_t i=0; i<(am->cfg->packetlen_samples>100?100:am->cfg->packetlen_samples); i+=4) {
-			printwave(am->play.pcmbuf[i  ],
-                                  am->play.pcmbuf[i+1],
-                                  am->play.pcmbuf[i+2],
-                                  am->play.pcmbuf[i+3]);
-			putchar('\n');
 
-		}
+#ifdef PRINTWAVE
+		printwave(PRINTWAVEHEIGHT/4+1,1, am->play.pcmbuf, am->cfg->packetlen_samples);
 #endif
+
 		for (size_t i=0; i<am->cfg->packetlen_samples; ++i) {
 			if (am->play.mixbuf[i] > INT16_MAX) {
 				am->play.pcmbuf[i] = INT16_MAX;
@@ -179,14 +184,23 @@ bool get_alsa_input(audio_manager *am) { /*{{{*/
 	assert(am != NULL);
 	if (am->cap.pcmwi == am->cfg->packetlen_samples) { return false; }
 	snd_pcm_sframes_t n = snd_pcm_readi(am->alsa.input, am->cap.pcmbuf+am->cap.pcmwi, am->cfg->packetlen_samples-am->cap.pcmwi);
+#ifdef VERBOSE_AUDIO
+	if (capture_eagain_counter >= 0x0400 || (capture_eagain_counter > 0 && n != -EAGAIN)) {
+		AUDIO_VPRINTF("eagain count=%u\n", capture_eagain_counter);
+		capture_eagain_counter = 0;
+	}
+#endif
 	if (n == -EAGAIN) {
+#ifdef VERBOSE_AUDIO
+		++capture_eagain_counter;
+#endif
 		return false;
 	}
 	if (n < 0) {
 		n = snd_pcm_recover(am->alsa.input, n, 0);
 	}
 	if (n < 0) {
-		//fprintf(stderr, "snd_pcm_readi failed %s\n", snd_strerror(n));
+		AUDIO_VPRINTF("snd_pcm_readi failed %s\n", snd_strerror(n));
 		return true;
 	}
 	if (n >= 0) {
@@ -263,65 +277,60 @@ bool interpret_contents(packet *ap, bool local) { /*{{{*/
 	}
 	return false;
 }/*}}}*/
-packet *build_opus_packet_from_captured_data(audio_manager *am) { /*{{{*/
+bool build_opus_packets_from_captured_data(p_list *packets, audio_manager *am) { /*{{{*/
 
-	if (am->cap.pcmwi < am->cfg->packetlen_samples) { return NULL; }
+	if (am->cap.pcmwi < am->cfg->packetlen_samples) { return false; }
 	am->cap.pcmwi = 0;
 
 #ifdef PRINTWAVE
-		setpos(1,1);
-		for (size_t i=0; i<(am->cfg->packetlen_samples>100?100:am->cfg->packetlen_samples); i+=4) {
-			printwave(am->cap.pcmbuf[i  ],
-                                  am->cap.pcmbuf[i+1],
-                                  am->cap.pcmbuf[i+2],
-                                  am->cap.pcmbuf[i+3]);
-			putchar('\n');
-
-		}
+	printwave(1, 1, am->cap.pcmbuf, am->cfg->packetlen_samples);
 #endif
 
+	for (size_t p=0; p<RECN; ++p) {
 
-	const size_t enc_len_est = am->cfg->packetlen_us * am->cfg->bitrate_bps / 8000000;
-	packet *ap = get_packet(am->packet_pool, AP_OUT_STATICS_UB + enc_len_est*3/2);
+		const size_t enc_len_est = am->cfg->packetlen_us * am->cfg->bitrate_bps / 8000000;
+		packet *ap = get_packet(am->packet_pool, AP_OUT_STATICS_UB + enc_len_est*3/2);
 
-	uint8_t metadata[AP_OUT_STATICS_UB];
+		uint8_t metadata[AP_OUT_STATICS_UB];
 
-	assert(ap != NULL);
-	assert(ap->data != NULL);
+		assert(ap != NULL);
+		assert(ap->data != NULL);
 
-	ap->type = OPUS;
-	ap->opus.target = am->cap.target;
-	ap->opus.seq    = am->cap.seq;
-	am->cap.seq += 2;
-	ap->opus.islast = am->cap.islast;
+		ap->type = OPUS;
+		ap->opus.target = am->cap.target;
+		ap->opus.seq    = am->cap.seq;
+		am->cap.seq += 2;
+		ap->opus.islast = am->cap.islast;
 
-	uint16_t m = 2+4;
+		uint16_t m = 2+4;
 
-	metadata[m] = ap->type | (ap->opus.target & 0x1f);
-	++m;
+		metadata[m] = ap->type | (ap->opus.target & 0x1f);
+		++m;
 
-	m += varint_encode(&metadata[m], 9, ap->opus.seq);
+		m += varint_encode(&metadata[m], 9, ap->opus.seq);
 
-	uint16_t n = ap->opus.len = opus_encode(am->cap.encoder, am->cap.pcmbuf, am->cfg->packetlen_samples, ap->data+AP_OUT_STATICS_UB, (ap->dsz-AP_OUT_STATICS_UB)&0x1fff);
+		uint16_t n = ap->opus.len = opus_encode(am->cap.encoder, am->cap.pcmbuf+p*am->cfg->packetlen_samples, am->cfg->packetlen_samples, ap->data+AP_OUT_STATICS_UB, (ap->dsz-AP_OUT_STATICS_UB)&0x1fff);
 
-	m += varint_encode(&metadata[m], 9, (ap->opus.islast ? 0x2000 : 0x0000) | n);
+		m += varint_encode(&metadata[m], 9, (ap->opus.islast ? 0x2000 : 0x0000) | n);
 
-	ap->raw.data = ap->data+AP_OUT_STATICS_UB-m;
-	ap->raw.len  = m + n;
-	uint32_t plen = ap->raw.len-6;
-	ap->raw.type = 1;
+		ap->raw.data = ap->data+AP_OUT_STATICS_UB-m;
+		ap->raw.len  = m + n;
+		uint32_t plen = ap->raw.len-6;
+		ap->raw.type = 1;
 
-	metadata[0] = (ap->raw.type >> 8) & 0xff;
-	metadata[1] = (ap->raw.type     ) & 0xff;
-	metadata[2] = (plen >> 24) & 0xff;
-	metadata[3] = (plen >> 16) & 0xff;
-	metadata[4] = (plen >>  8) & 0xff;
-	metadata[5] = (plen      ) & 0xff;
-	for (uint16_t i=0; i<m; ++i) {
-		ap->data[AP_OUT_STATICS_UB-m+i] = metadata[i];
+		metadata[0] = (ap->raw.type >> 8) & 0xff;
+		metadata[1] = (ap->raw.type     ) & 0xff;
+		metadata[2] = (plen >> 24) & 0xff;
+		metadata[3] = (plen >> 16) & 0xff;
+		metadata[4] = (plen >>  8) & 0xff;
+		metadata[5] = (plen      ) & 0xff;
+		for (uint16_t i=0; i<m; ++i) {
+			ap->data[AP_OUT_STATICS_UB-m+i] = metadata[i];
+		}
+		p_lpushback(packets, ap);
 	}
 
-	return ap;
+	return true;
 } /*}}}*/
 
 void dissect_outgoing_opus_packet(const packet *p) { /*{{{*/
@@ -355,8 +364,3 @@ void dissect_outgoing_opus_packet(const packet *p) { /*{{{*/
 	       dplen,
 	       mplen);
 } /*}}}*/
-
-
-
-
-
