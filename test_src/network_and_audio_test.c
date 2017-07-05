@@ -3,6 +3,7 @@
 #include "../src/config.h"
 #include "../src/network.h"
 #include "../src/audio.h"
+#include "../src/lradc.h"
 
 #include "../src/mumble_pb.h"
 
@@ -221,6 +222,8 @@ int main(int argc, char **argv) {
 	send_auth_packet(&nm);
 
 	time_t last_time = 0;
+	lradc adc;
+	lradc_setup(&adc);
 	for (;;) {
 
 		bool captured    = false;
@@ -234,8 +237,7 @@ int main(int argc, char **argv) {
 		captured = get_alsa_input(&am);
 
 		// encode
-		encoded = build_opus_packets_from_captured_data(&nm.egress.queue, &am);
-		/*
+		packet *ap = build_opus_packet_from_captured_data(&am);
 		if (ap != NULL) {
 			if (ap->raw.type == 1) {
 				nm_post_egress(&nm, ap);
@@ -247,7 +249,6 @@ int main(int argc, char **argv) {
 
 			encoded = true;
 		}
-		*/
 
 		// transmit
 		transmitted = nm_write(&nm);
@@ -276,9 +277,28 @@ int main(int argc, char **argv) {
 		bool activity = captured || encoded || transmitted || received || decoded || played;
 
 		if (!activity) {
+			switch (lradc_key(&adc)) {
+				case LRADC_REC:
+					printf("rec pressed\n");
+					if (!am.cap.recording) {
+						printf("  starting capture\n");
+						start_recording(&am);
+					}
+					else {
+						printf("  ending capture\n");
+						end_recording(&am);
+					}
+					break;
+				case LRADC_VOLDOWN:
+					printf("voldown pressed\n");
+					break;
+				case LRADC_VOLUP:
+					printf("volup pressed\n");
+					break;
+				default:
+					break;
+			}
 			usleep(1250);
 		}
-
-
 	}
 }

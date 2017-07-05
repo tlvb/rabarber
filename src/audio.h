@@ -41,6 +41,7 @@ typedef struct {
 
 	} play;
 	struct {
+		bool    recording;
 		int16_t *pcmbuf;
 		size_t   pcmwi;
 		OpusEncoder *encoder;
@@ -70,5 +71,8 @@ bool get_alsa_input(audio_manager *am);
 void fprint_audio_packet(FILE *f, const packet *p);
 bool interpret_contents(packet *ap, bool local);
 
-bool build_opus_packets_from_captured_data(p_list *packets, audio_manager *am);
+packet *build_opus_packet_from_captured_data(audio_manager *am);
 void dissect_outgoing_opus_packet(const packet *p);
+
+void start_recording(audio_manager *am);
+void end_recording(audio_manager *am);

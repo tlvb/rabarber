@@ -11,8 +11,6 @@
 #define AUDIO_VPRINTF(...)
 #endif
 
-#define RECN 4
-
 // max size of outgoing opus audio packet minus the encoded payload data
 // packet header      2
 // packet len         4
@@ -38,7 +36,8 @@ bool am_setup(audio_manager *am, const audio_config *ac, p_pool *pool) { /*{{{*/
 	am->play.mixbuf = calloc(am->cfg->packetlen_samples, sizeof(int32_t));
 	am->play.pcmbuf = calloc(am->cfg->packetlen_samples, sizeof(int16_t));
 	am->play.pcmri = 0;
-	am->cap.pcmbuf = calloc(am->cfg->packetlen_samples*RECN, sizeof(int16_t));
+	am->cap.recording = false;
+	am->cap.pcmbuf = calloc(am->cfg->packetlen_samples, sizeof(int16_t));
 	am->cap.pcmwi = 0;
 
 	int e;
@@ -182,6 +181,7 @@ bool write_alsa_output(audio_manager *am) { /*{{{*/
 }/*}}}*/
 bool get_alsa_input(audio_manager *am) { /*{{{*/
 	assert(am != NULL);
+	if (!am->cap.recording) { return false; }
 	if (am->cap.pcmwi == am->cfg->packetlen_samples) { return false; }
 	snd_pcm_sframes_t n = snd_pcm_readi(am->alsa.input, am->cap.pcmbuf+am->cap.pcmwi, am->cfg->packetlen_samples-am->cap.pcmwi);
 #ifdef VERBOSE_AUDIO
@@ -198,6 +198,9 @@ bool get_alsa_input(audio_manager *am) { /*{{{*/
 	}
 	if (n < 0) {
 		n = snd_pcm_recover(am->alsa.input, n, 0);
+		snd_pcm_reset(am->alsa.input);
+		snd_pcm_prepare(am->alsa.input);
+		snd_pcm_start(am->alsa.input);
 	}
 	if (n < 0) {
 		AUDIO_VPRINTF("snd_pcm_readi failed %s\n", snd_strerror(n));
@@ -277,60 +280,61 @@ bool interpret_contents(packet *ap, bool local) { /*{{{*/
 	}
 	return false;
 }/*}}}*/
-bool build_opus_packets_from_captured_data(p_list *packets, audio_manager *am) { /*{{{*/
+packet *build_opus_packet_from_captured_data(audio_manager *am) { /*{{{*/
 
-	if (am->cap.pcmwi < am->cfg->packetlen_samples) { return false; }
+	if (am->cap.pcmwi < am->cfg->packetlen_samples) { return NULL; }
 	am->cap.pcmwi = 0;
 
 #ifdef PRINTWAVE
 	printwave(1, 1, am->cap.pcmbuf, am->cfg->packetlen_samples);
 #endif
 
-	for (size_t p=0; p<RECN; ++p) {
 
-		const size_t enc_len_est = am->cfg->packetlen_us * am->cfg->bitrate_bps / 8000000;
-		packet *ap = get_packet(am->packet_pool, AP_OUT_STATICS_UB + enc_len_est*3/2);
+	const size_t enc_len_est = am->cfg->packetlen_us * am->cfg->bitrate_bps / 8000000;
+	packet *ap = get_packet(am->packet_pool, AP_OUT_STATICS_UB + enc_len_est*3/2);
 
-		uint8_t metadata[AP_OUT_STATICS_UB];
+	uint8_t metadata[AP_OUT_STATICS_UB];
 
-		assert(ap != NULL);
-		assert(ap->data != NULL);
+	assert(ap != NULL);
+	assert(ap->data != NULL);
 
-		ap->type = OPUS;
-		ap->opus.target = am->cap.target;
-		ap->opus.seq    = am->cap.seq;
-		am->cap.seq += 2;
-		ap->opus.islast = am->cap.islast;
-
-		uint16_t m = 2+4;
-
-		metadata[m] = ap->type | (ap->opus.target & 0x1f);
-		++m;
-
-		m += varint_encode(&metadata[m], 9, ap->opus.seq);
-
-		uint16_t n = ap->opus.len = opus_encode(am->cap.encoder, am->cap.pcmbuf+p*am->cfg->packetlen_samples, am->cfg->packetlen_samples, ap->data+AP_OUT_STATICS_UB, (ap->dsz-AP_OUT_STATICS_UB)&0x1fff);
-
-		m += varint_encode(&metadata[m], 9, (ap->opus.islast ? 0x2000 : 0x0000) | n);
-
-		ap->raw.data = ap->data+AP_OUT_STATICS_UB-m;
-		ap->raw.len  = m + n;
-		uint32_t plen = ap->raw.len-6;
-		ap->raw.type = 1;
-
-		metadata[0] = (ap->raw.type >> 8) & 0xff;
-		metadata[1] = (ap->raw.type     ) & 0xff;
-		metadata[2] = (plen >> 24) & 0xff;
-		metadata[3] = (plen >> 16) & 0xff;
-		metadata[4] = (plen >>  8) & 0xff;
-		metadata[5] = (plen      ) & 0xff;
-		for (uint16_t i=0; i<m; ++i) {
-			ap->data[AP_OUT_STATICS_UB-m+i] = metadata[i];
-		}
-		p_lpushback(packets, ap);
+	ap->type = OPUS;
+	ap->opus.target = am->cap.target;
+	ap->opus.seq    = am->cap.seq;
+	am->cap.seq += 2;
+	ap->opus.islast = am->cap.islast;
+	if (am->cap.islast) {
+		snd_pcm_drop(am->alsa.input);
+		am->cap.recording = false;
 	}
 
-	return true;
+	uint16_t m = 2+4;
+
+	metadata[m] = ap->type | (ap->opus.target & 0x1f);
+	++m;
+
+	m += varint_encode(&metadata[m], 9, ap->opus.seq);
+
+	uint16_t n = ap->opus.len = opus_encode(am->cap.encoder, am->cap.pcmbuf, am->cfg->packetlen_samples, ap->data+AP_OUT_STATICS_UB, (ap->dsz-AP_OUT_STATICS_UB)&0x1fff);
+
+	m += varint_encode(&metadata[m], 9, (ap->opus.islast ? 0x2000 : 0x0000) | n);
+
+	ap->raw.data = ap->data+AP_OUT_STATICS_UB-m;
+	ap->raw.len  = m + n;
+	uint32_t plen = ap->raw.len-6;
+	ap->raw.type = 1;
+
+	metadata[0] = (ap->raw.type >> 8) & 0xff;
+	metadata[1] = (ap->raw.type     ) & 0xff;
+	metadata[2] = (plen >> 24) & 0xff;
+	metadata[3] = (plen >> 16) & 0xff;
+	metadata[4] = (plen >>  8) & 0xff;
+	metadata[5] = (plen      ) & 0xff;
+	for (uint16_t i=0; i<m; ++i) {
+		ap->data[AP_OUT_STATICS_UB-m+i] = metadata[i];
+	}
+
+	return ap;
 } /*}}}*/
 
 void dissect_outgoing_opus_packet(const packet *p) { /*{{{*/
@@ -364,3 +368,20 @@ void dissect_outgoing_opus_packet(const packet *p) { /*{{{*/
 	       dplen,
 	       mplen);
 } /*}}}*/
+
+void start_recording(audio_manager *am) { /*{{{*/
+	am->cap.islast = false;
+	am->cap.recording = true;
+	am->cap.pcmwi = 0;
+	opus_encoder_ctl(am->cap.encoder, OPUS_RESET_STATE);
+	snd_pcm_reset(am->alsa.input);
+	snd_pcm_prepare(am->alsa.input);
+	snd_pcm_start(am->alsa.input);
+}/*}}}*/
+void end_recording(audio_manager *am) { /*{{{*/
+	am->cap.islast = true;
+}/*}}}*/
+
+
+
+
