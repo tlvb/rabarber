@@ -8,6 +8,7 @@ lradc_test
 
 # these contain passwords (private)
 conf/debug.cfg
+conf/chip.cfg
 
 # these contain private data
 cert/*

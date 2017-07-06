@@ -16,6 +16,9 @@ typedef struct {
 typedef struct {
 	char     *input_device;
 	char     *output_device;
+	char     *mixer_device;
+	char     *output_volume_control;
+	uint32_t  volume_steps;
 	uint32_t  fs_Hz;
 	uint32_t  bitrate_bps;
 	uint32_t  packetlen_us;

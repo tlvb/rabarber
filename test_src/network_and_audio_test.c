@@ -291,9 +291,11 @@ int main(int argc, char **argv) {
 					break;
 				case LRADC_VOLDOWN:
 					printf("voldown pressed\n");
+					decrease_volume(&am);
 					break;
 				case LRADC_VOLUP:
 					printf("volup pressed\n");
+					increase_volume(&am);
 					break;
 				default:
 					break;

@@ -53,6 +53,11 @@ typedef struct {
 	struct {
 		snd_pcm_t *output;
 		snd_pcm_t *input;
+		snd_mixer_t *mixer;
+		snd_mixer_elem_t *volume_control;
+		long volmin;
+		long volmax;
+		long volume;
 	} alsa;
 } audio_manager;
 
@@ -60,6 +65,7 @@ typedef struct {
 bool am_setup(audio_manager *am, const audio_config *ac, p_pool *pool);
 bool setup_alsa_output(audio_manager *am);
 bool setup_alsa_input(audio_manager *am);
+bool setup_alsa_mixer(audio_manager *am);
 bool shutdown_alsa_output(audio_manager *am);
 void kab_free(keyed_ap_buffer *kab);
 
@@ -76,3 +82,6 @@ void dissect_outgoing_opus_packet(const packet *p);
 
 void start_recording(audio_manager *am);
 void end_recording(audio_manager *am);
+
+void increase_volume(audio_manager *am);
+void decrease_volume(audio_manager *am);

@@ -45,7 +45,7 @@ bool am_setup(audio_manager *am, const audio_config *ac, p_pool *pool) { /*{{{*/
 	assert(e == OPUS_OK);
 	opus_encoder_ctl(am->cap.encoder, OPUS_SET_BITRATE(am->cfg->bitrate_bps));
 	opus_encoder_ctl(am->cap.encoder, OPUS_SET_INBAND_FEC(1));
-	return setup_alsa_output(am) && setup_alsa_input(am);
+	return setup_alsa_output(am) && setup_alsa_input(am) && setup_alsa_mixer(am);;
 }/*}}}*/
 bool setup_alsa_output(audio_manager *am) { /*{{{*/
 	AUDIO_FAIL_IF( 0 != snd_pcm_open(&am->alsa.output, am->cfg->output_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK),
@@ -59,6 +59,37 @@ bool setup_alsa_input(audio_manager *am) { /*{{{*/
 	              "could not open input device %s\n", am->cfg->input_device);
 	AUDIO_FAIL_IF( 0 != snd_pcm_set_params(am->alsa.input, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED, 1, am->cfg->fs_Hz, 1, am->cfg->input_latency_us),
 	              "could not configure input device %s\n", am->cfg->input_device);
+	return true;
+} /*}}}*/
+bool setup_alsa_mixer(audio_manager *am) { /*{{{*/
+	AUDIO_FAIL_IF( 0 != snd_mixer_open(&am->alsa.mixer, 0),
+	              "could not open mixer\n");
+	AUDIO_FAIL_IF( 0 != snd_mixer_attach(am->alsa.mixer, am->cfg->mixer_device),
+	              "could not attach mixer handle\n");
+	AUDIO_FAIL_IF( 0 != snd_mixer_selem_register(am->alsa.mixer, NULL, NULL),
+	              "could not register mixer\n");
+	AUDIO_FAIL_IF( 0 != snd_mixer_load(am->alsa.mixer),
+	              "could not load mixer elements\n");
+	snd_mixer_selem_id_t *sid;
+	snd_mixer_selem_id_alloca(&sid);
+	snd_mixer_selem_id_set_index(sid, 0);
+	snd_mixer_selem_id_set_name(sid, am->cfg->output_volume_control);
+	am->alsa.volume_control = snd_mixer_find_selem(am->alsa.mixer, sid);
+	AUDIO_FAIL_IF( am->alsa.volume_control == NULL, "could not find volume control\n");
+	long tmp = 0;
+	snd_mixer_selem_get_playback_volume_range(am->alsa.volume_control, &am->alsa.volmin, &am->alsa.volmax);
+	AUDIO_FAIL_IF( 0 != snd_mixer_selem_get_playback_volume(am->alsa.volume_control, 0, &tmp),
+	              "could not get volume\n");
+	printf("volume (%ld-%ld): %ld\n", am->alsa.volmin, am->alsa.volmax, tmp);
+
+	uint32_t delta = am->alsa.volmax - am->alsa.volmin;
+	if (delta < am->cfg->volume_steps) {
+		am->alsa.volume = tmp;
+	}
+	else {
+		am->alsa.volume = (tmp - am->alsa.volmin) * am->cfg->volume_steps / delta;
+	}
+
 	return true;
 } /*}}}*/
 bool shutdown_alsa_output(audio_manager *am) { /*{{{*/
@@ -382,6 +413,28 @@ void end_recording(audio_manager *am) { /*{{{*/
 	am->cap.islast = true;
 }/*}}}*/
 
+void increase_volume(audio_manager *am) { /*{{{*/
+	uint32_t delta = am->alsa.volmax - am->alsa.volmin;
+	if (delta < am->cfg->volume_steps) {
+		am->alsa.volume = am->alsa.volume >= am->alsa.volmax ? am->alsa.volmax : am->alsa.volume + 1;
 
-
-
+	}
+	else {
+		am->alsa.volume = am->alsa.volume >= (long)am->cfg->volume_steps ? (long)am->cfg->volume_steps : am->alsa.volume + 1;
+		snd_mixer_selem_set_playback_volume_all(am->alsa.volume_control,
+		                                        am->alsa.volume*delta/am->cfg->volume_steps+am->alsa.volmin);
+	}
+	printf("%ld\n", am->alsa.volume);
+}/*}}}*/
+void decrease_volume(audio_manager *am) { /*{{{*/
+	uint32_t delta = am->alsa.volmax - am->alsa.volmin;
+	if (delta < am->cfg->volume_steps) {
+		am->alsa.volume = am->alsa.volume <= am->alsa.volmin ? am->alsa.volmin : am->alsa.volume - 1;
+	}
+	else {
+		am->alsa.volume = am->alsa.volume <= 0 ? 0 : am->alsa.volume - 1;
+		snd_mixer_selem_set_playback_volume_all(am->alsa.volume_control,
+		                                        am->alsa.volume*delta/am->cfg->volume_steps+am->alsa.volmin);
+	}
+	printf("%ld\n", am->alsa.volume);
+}/*}}}*/

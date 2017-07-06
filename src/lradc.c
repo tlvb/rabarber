@@ -15,12 +15,10 @@ bool lradc_setup(lradc *l) { /*{{{*/
 	l->page = mmap(NULL, page_size, PROT_READ, MAP_SHARED, l->fd, page_addr);
 
 	l->ptr = ((volatile uint32_t*)l->page) + LRADC_INDEX;
-	l->pressed = false;
+	l->pressed = true;
 	return true;
-
 } /*}}}*/
-
-uint8_t lradc_key(lradc *l) {
+uint8_t lradc_key(lradc *l) { /*{{{*/
 	uint8_t v = lradc_value(l);
 	if (v > 20) {
 		l->pressed = false;
@@ -38,4 +36,4 @@ uint8_t lradc_key(lradc *l) {
 		}
 	}
 	return LRADC_NOKEY;
-}
+} /*}}}*/
