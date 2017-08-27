@@ -11,7 +11,7 @@ for that matter.
 * `varint.c` and `varint.h` from [varint-c](https://github.com/tlvb/varint-c)  
 These are to be either copied or symlinked into `src/`
 
-The reason for this is because they are either fetched or generrated from other codebases, as is the case
+The reason for this is because they are either fetched or generated from other codebases, as is the case
 with the protobuf protocol files, or because I saw them as isolated enough in scope and functionality,
 as well as versatile enough that I might want to use them in other projects, that I made a generic
 non-rabarber-specific implementation.
@@ -19,4 +19,6 @@ non-rabarber-specific implementation.
 ## Current issues
 * It's not finished yet  
 * Frequent ALSA underrun error messages, while not ideal, the program works for the intended purpose.  
-* Only a minimally viable part of the mumble protocol is so far supported, for connection+tx+rx, e.g. no udp.
+* Only a minimally viable part of the mumble protocol is so far supported, for connection+tx+rx, e.g. no udp.  
+* When receiving long continuous transmissions there is an increasing timeshift that becomes noticeable after >1 min.
+I do not currently know which part of the transmission chain that is responsible.
