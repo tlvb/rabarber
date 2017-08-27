@@ -39,6 +39,11 @@ typedef struct {
 		int16_t *pcmbuf;
 		size_t   pcmri;
 
+		struct {
+			uint32_t f;
+			uint32_t i;
+			uint32_t t;
+		} tone[2];
 	} play;
 	struct {
 		bool    recording;
@@ -85,3 +90,5 @@ void end_recording(audio_manager *am);
 
 void increase_volume(audio_manager *am);
 void decrease_volume(audio_manager *am);
+
+void play_2tone(audio_manager *am, uint32_t f0, uint32_t t0, uint32_t f1, uint32_t t1);

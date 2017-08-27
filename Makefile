@@ -14,7 +14,7 @@ CFLAGS += -Wl,-z,relro -Wl,-z,now
 
 #CFLAGS += -DPRINTWAVE -DPRINTWAVEDIVISOR=3000 -DPRINTWAVEWIDTH=8 -DPRINTWAVEHEIGHT=16
 
-test_binaries = playback_test capture_test capture_and_playback_test connection_test network_and_audio_test lradc_test
+test_binaries = playback_test capture_test capture_and_playback_test connection_test network_and_audio_test lradc_test network_and_audio_and_tone_test
 libraries = opus asound crypto ssl protobuf-c
 test_libraries = m
 
@@ -27,6 +27,10 @@ test_libparams = $(addprefix -l,$(test_libraries))
 
 .PHONY: test_binaries
 test_binaries: $(test_binaries)
+
+network_and_audio_and_tone_test: network_and_audio_and_tone_test.o $(objs)
+	$(CC) $(CFLAGS) -o $@ $^ $(libparams) $(test_libparams)
+
 lradc_test: lradc_test.o $(objs)
 	$(CC) $(CFLAGS) -o $@ $^ $(libparams) $(test_libparams)
 

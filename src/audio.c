@@ -169,8 +169,30 @@ bool decode_and_mix(audio_manager *am) { /*{{{*/
 			}
 		}
 	}
+	bool tone = false;
+	for (size_t i=0; i<2; ++i) {
+		if (am->play.tone[i].t > 0) {
+			tone = true;
+			for (size_t j=0; j<am->cfg->packetlen_samples; ++j) {
+				am->play.mixbuf[j] += (int16_t) ((INT16_MAX>>1)*sinf(((float)am->play.tone[i].i)*((float)am->play.tone[i].f)*6.28318530717959f/((float)am->cfg->fs_Hz)));
+				++am->play.tone[i].i;
+			}
+			// approximate time-keeping
+			uint32_t n_ms = am->cfg->fs_Hz / 1000;
+			if (am->play.tone[i].t > n_ms) {
+				am->play.tone[i].t -= n_ms;
+			}
+			else {
+				am->play.tone[i].t = 0;
+			}
+			if (am->play.tone[i].t == 0) {
+				am->play.tone[i].f = 0;
+			}
+			break;
+		}
+	}
 	// clip
-	if (decoded) {
+	if (decoded || tone) {
 
 #ifdef PRINTWAVE
 		printwave(PRINTWAVEHEIGHT/4+1,1, am->play.pcmbuf, am->cfg->packetlen_samples);
@@ -417,7 +439,6 @@ void increase_volume(audio_manager *am) { /*{{{*/
 	uint32_t delta = am->alsa.volmax - am->alsa.volmin;
 	if (delta < am->cfg->volume_steps) {
 		am->alsa.volume = am->alsa.volume >= am->alsa.volmax ? am->alsa.volmax : am->alsa.volume + 1;
-
 	}
 	else {
 		am->alsa.volume = am->alsa.volume >= (long)am->cfg->volume_steps ? (long)am->cfg->volume_steps : am->alsa.volume + 1;
@@ -438,3 +459,12 @@ void decrease_volume(audio_manager *am) { /*{{{*/
 	}
 	printf("%ld\n", am->alsa.volume);
 }/*}}}*/
+
+void play_2tone(audio_manager *am, uint32_t f0, uint32_t t0, uint32_t f1, uint32_t t1) { /*{{{*/
+	am->play.tone[0].f = f0;
+	am->play.tone[0].t = t0;
+	am->play.tone[0].i = 0;
+	am->play.tone[1].f = f1;
+	am->play.tone[1].t = t1;
+	am->play.tone[1].i = 0;
+} /*}}}*/
