@@ -16,7 +16,14 @@ with the protobuf protocol files, or because I saw them as isolated enough in sc
 as well as versatile enough that I might want to use them in other projects, that I made a generic
 non-rabarber-specific implementation.
 
-## Current issues
+## Documentation/Understanding the Code
+You'll probably want a cursory glance at [what the mumble protocol looks like](https://mumble-protocol.readthedocs.io/en/latest/)
+before delving into this. Unfortunately the code is pretty scarcely commented and this is unlikely to change,
+but there are two graphviz dot files in the `doc/` folder which together with the code should help explain the dataflow
+from alsa to network, and network to alsa respectively. Running `make documentation`, or just the default target,
+should turn the dot files into pdfs.
+
+## Current Issues
 * It's not finished yet  
 * Frequent ALSA underrun error messages, while not ideal, the program works for the intended purpose.  
 * Only a minimally viable part of the mumble protocol is so far supported, for connection+tx+rx, e.g. no udp.  

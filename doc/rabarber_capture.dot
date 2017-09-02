@@ -1,0 +1,73 @@
+digraph g {
+
+
+	compound=true;
+	rankdir=LR;
+
+	node [shape=box,style=""];
+	edge [minlen=3];
+
+	subgraph cluster_packet_pool {
+		label="packet pool";
+		color=forestgreen;
+		packet_pool [shape=cylinder,style="",color=forestgreen,label="          "];
+	}
+
+
+
+	subgraph cluster_mainloop {
+		label="main loop";
+		main_capture [label="1 capture audio"];
+		main_encode [label="2 encode audio"];
+		main_write [label="3 transmit egress data"];
+		main_read [label="4 fetch ingress data",color=gray,fontcolor=gray];
+		main_read [label="5 route received packet",color=gray,fontcolor=gray];
+		main_decode [label="6 decode and mix",color=gray,fontcolor=gray];
+		main_play [label="7 audio playback",color=gray,fontcolor=gray];
+	}
+
+	subgraph cluster_audio {
+		label="audio subsystem";
+
+		subgraph cluster_capture_audio {
+			label="capture audio";
+			alsa [label=<alsa audio<br/>interface>,shape=parallelogram,style="",color=blue];
+			capture_buffer [label="capture buffer",shape=box3d,style="",color=blue];
+		}
+		subgraph cluster_encode {
+			label="encode to opus";
+			fresh_packet [label="fresh packet",shape=note,style="",color=forestgreen];
+		}
+
+	}
+
+
+	subgraph cluster_network {
+		label="network subsystem";
+		egress_list [shape=box3d,style="",color=forestgreen,label="egress list"];
+		subgraph cluster_write_ssl {
+			label="write egress data";
+			current_egress_packet [label="curent egress packet",shape=note,style="",color=forestgreen];
+			ssl [label=<ssl network<br/>interface>,shape=parallelogram,style="",color=brown];
+		}
+
+
+
+
+	}
+	current_egress_packet->ssl [color=brown,constraint=false];
+	//main_capture -> alsa [lhead=cluster_capture_audio,dir=both,color="black:red",label="buffer full?",fontcolor=red];
+	main_capture -> alsa [lhead=cluster_capture_audio];
+	//main_capture -> main_encode [color="red",constraint=false];
+	main_encode -> fresh_packet [color="black",lhead=cluster_encode];
+	main_encode -> fresh_packet [color=forestgreen,dir=back];
+	main_encode -> egress_list [color="forestgreen"];
+	main_write -> current_egress_packet [lhead=cluster_write_ssl];
+
+	current_egress_packet->egress_list [constraint=false,dir=back,color=forestgreen];
+	current_egress_packet->packet_pool [color=forestgreen];
+
+	fresh_packet -> packet_pool [dir=back,color=forestgreen];
+	alsa -> capture_buffer [constraint=false,color=blue];
+	fresh_packet -> capture_buffer [constraint=false,dir=back,color=blue];
+}

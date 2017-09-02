@@ -1,0 +1,95 @@
+digraph g {
+
+
+	compound=true;
+	rankdir=LR;
+
+	node [shape=box,style=""];
+	edge [minlen=3];
+
+	subgraph cluster_packet_pool {
+		label="packet pool";
+		color=forestgreen;
+		packet_pool [shape=cylinder,style="",color=forestgreen,label="          "];
+	}
+	subgraph cluster_audio_buffer_pool {
+		label="audio buffer pool";
+		color=purple;
+		audio_buffer_pool [shape=cylinder,style="",color=purple,label="          "];
+	}
+
+
+
+	subgraph cluster_mainloop {
+		label="main loop";
+		main_capture [label="1 capture audio",color=gray,fontcolor=gray];
+		main_encode [label="2 encode audio",color=gray,fontcolor=gray];
+		main_write [label="3 transmit egress data",color=gray,fontcolor=gray];
+		main_read [label="4 fetch ingress data"];
+		main_route [label="5 route received packet"];
+		main_decode [label="6 decode and mix"];
+		main_play [label="7 audio playback"];
+	}
+	subgraph cluster_network {
+		label="network subsystem";
+		subgraph cluster_read_ssl {
+			label="read ingress data";
+			ssl [label=<ssl network<br/>interface>,shape=parallelogram,style="",color=brown];
+			current_ingress_packet [label="current ingress packet",shape=note,style="",color=forestgreen];
+		}
+
+
+
+
+	}
+
+	subgraph cluster_audio {
+		label="audio subsystem";
+
+
+		audio_buffer_list [label="audio buffer list",shape=box3d,style="",color=purple];
+		subgraph cluster_route_packet {
+			label=<route packet to buffer<br/>based on source>;
+			subgraph cluster_selected_buffer {
+				label="target buffer";
+				color="purple";
+				packet_list [label="packet list",shape=box3d,style="",color=forestgreen];
+			}
+		}
+
+
+		decode [label=<decode one <font color="forestgreen">packet</font> from every<br/><font color="purple">buffer</font> and add into a <font color="blue">mixing<br/>buffer</font>, clip the sum for playback.>];
+
+
+		subgraph cluster_audio_playback {
+			label="audio playback";
+			playback_buffer [label="playback buffer",shape=box3d,style="",color=blue];
+			alsa [label=<alsa audio<br/>interface>,shape=parallelogram,style="",color=blue];
+		}
+
+
+
+	}
+
+	main_read -> current_ingress_packet [lhead=cluster_read_ssl];
+	main_read -> current_ingress_packet [dir=back,color=forestgreen];
+	main_read -> main_route [color=forestgreen,constraint=false];
+	current_ingress_packet->ssl [color=brown,dir=back,constraint=false];
+	current_ingress_packet->packet_pool [color=forestgreen,dir=back];
+	packet_list -> audio_buffer_pool [ltail=cluster_selected_buffer,dir=back,color=purple];
+	packet_list -> audio_buffer_list [constraint=false,ltail=cluster_selected_buffer,dir=both,color=purple];
+	main_route -> packet_list [lhead=cluster_route_packet,constraint=false];
+	main_route -> packet_list [color=forestgreen];
+	main_decode -> decode;
+	main_play -> playback_buffer [lhead=cluster_audio_playback];
+
+
+
+	decode -> audio_buffer_list [color=purple,dir=back,constraint=false];
+	decode -> packet_pool [color=forestgreen,constraint=false];
+	decode -> audio_buffer_pool [color=purple,constraint=false];
+	decode -> playback_buffer [color=blue,constraint=false];
+	playback_buffer -> alsa [color=blue,constraint=false];
+
+}
+

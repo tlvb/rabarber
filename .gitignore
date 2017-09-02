@@ -5,6 +5,7 @@ connection_test
 network_and_audio_test
 lradc_test
 *.o
+*.pdf
 
 # these contain passwords (private)
 conf/debug.cfg
@@ -19,7 +20,6 @@ con_gdb
 naa_test
 upload.sh
 update.sh
-
 
 # these are symlinks to elsewhere
 src/config_core.c
